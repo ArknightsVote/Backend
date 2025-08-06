@@ -1,11 +1,19 @@
 name: Build
 
 on:
+  pull_request:
   push:
     branches:
       - master
-    
+
   workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   build:
