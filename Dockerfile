@@ -1,5 +1,5 @@
 # docker build -t arkvote:latest .
-FROM docker.io/rust:1.86-slim
+FROM docker.io/rust:1.88-slim
 ARG MOLD_VERSION=2.40.3
 
 WORKDIR /usr/src/ark-vote
