@@ -1,0 +1,10 @@
+{
+  "terminal.integrated.env.windows": {
+    "RUSTUP_TOOLCHAIN": "nightly",
+    "CARGO_BUILD_CONFIG": ".cargo/config_nightly.toml"
+  },
+  "rust-analyzer.cargo.extraEnv": {
+    "RUSTUP_TOOLCHAIN": "nightly",
+    "CARGO_BUILD_CONFIG": ".cargo/config_nightly.toml"
+  }
+}
