@@ -32,6 +32,14 @@ cargo run -- nats-consumer
 cargo run -- service-test
 ```
 
+或者docker构建并拉起
+
+```sh
+docker build -t arkvote:latest .
+
+docker compose up -d
+```
+
 ## 项目配置
 
 配置文件位于 `config/app.toml`，首次运行时会自动创建默认配置。您可以根据需要修改配置文件中的参数。

@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: docker.io/mongo:7.0
+    container_name: arkvote_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: arkvote
+      MONGO_INITDB_ROOT_PASSWORD: arkvote_password
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - arkvote_network
+
+  redis:
+    image: docker.io/redis:7-alpine
+    container_name: arkvote_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - arkvote_network
+
+  nats:
+    image: docker.io/nats:2.10-alpine
+    container_name: arkvote_nats
+    restart: unless-stopped
+    command: "--jetstream"
+    volumes:
+      - nats_data:/var/lib/nats/data
+    networks:
+      - arkvote_network
+
+  ark-vote:
+    image: arkvote:latest
+    container_name: arkvote_app
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - redis
+      - nats
+    volumes:
+      - ./character_table.json:/app/character_table.json
+      - ./docker_config:/app/config
+      - ./logs:/app/logs
+      - ./static:/app/static
+      - ./templates:/app/templates
+    ports:
+      - "3000:3000"
+    environment:
+      - APP_ENV=docker
+    user: "0"
+    networks:
+      - arkvote_network
+    command: ["/app/ark-vote", "web-server"]
+
+  nats-consumer:
+    image: arkvote:latest
+    container_name: arkvote_nats_consumer
+    restart: unless-stopped
+    depends_on:
+      - nats
+    volumes:
+      - ./character_table.json:/app/character_table.json
+      - ./docker_config:/app/config
+    environment:
+      - APP_ENV=docker
+    user: "0"
+    networks:
+      - arkvote_network
+    command: ["/app/ark-vote", "nats-consumer"]
+
+volumes:
+  mongodb_data:
+  redis_data:
+  nats_data:
+
+networks:
+  arkvote_network:
+    driver: bridge
