@@ -10,6 +10,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ccr.ccs.tencentyun.com
+  IMAGE_NAME: qwerdvd/ark-vote
+  MOLD_VERSION: '2.40.3'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -48,3 +51,37 @@ jobs:
         with:
           name: ${{ runner.os }}-release
           path: ${{ runner.os == 'Windows' && 'target/release/ark-vote.exe' || 'target/release/ark-vote' }}
+
+  docker-build:
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Tencent Cloud Registry
+        run: |
+          docker login ${{ env.REGISTRY }} \
+                       -u ${{ secrets.TENCENT_CLOUD_DOCKER_USER }} \
+                       -p ${{ secrets.TENCENT_CLOUD_DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg MOLD_VERSION=${{ env.MOLD_VERSION }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} .
+
+      - name: Tag Docker image
+        run: |
+          IMAGE_ID=$(docker images -q ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }})
+          docker tag $IMAGE_ID ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Push Docker image
+        run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
