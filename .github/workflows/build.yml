@@ -37,6 +37,8 @@ jobs:
 
       - name: Install mold
         uses: rui314/setup-mold@v1
+        with:
+          make-default: false
 
       - name: Build with cargo
         run: cargo build --release
