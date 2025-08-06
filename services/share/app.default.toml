@@ -1,0 +1,103 @@
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[vote]
+base_multiplier = 10
+low_multiplier = 1
+max_ip_limit = 100
+ip_counter_expire_seconds = 86400
+
+[[vote.preset_vote_topic]]
+id = "crisis_v2_season_4_1"
+name = "弧光作战"
+title = "弧光作战 六星角色投票"
+description = "弧光作战 六星角色投票"
+topic_type = "Pairwise"
+candidate_pool = "SixStarOperators"
+created_at = "2025-08-06T00:00:00Z"
+open_time = "2025-08-06T00:00:00Z"
+close_time = "2025-08-31T23:59:59Z"
+is_active = true
+
+[vote.preset_vote_topic.status.Approved]
+auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"
+auditor_name = "admin"
+audit_time = "2023-09-30T12:00:00Z"
+audit_reason = "Preset vote topic approved"
+audit_category = "ContentCompliance"
+
+[[vote.preset_vote_topic]]
+id = "rogue_5"
+name = "岁的界园志异"
+title = "岁的界园志异 肉鸽抓位投票"
+description = "岁的界园志异 肉鸽抓位投票"
+topic_type = "Pairwise"
+candidate_pool = "SixStarOperators"
+created_at = "2025-08-06T00:00:00Z"
+open_time = "2025-08-06T00:00:00Z"
+close_time = "2025-08-31T23:59:59Z"
+is_active = true
+
+[vote.preset_vote_topic.status.Approved]
+auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"
+auditor_name = "admin"
+audit_time = "2023-09-30T12:00:00Z"
+audit_reason = "Preset vote topic approved"
+audit_category = "ContentCompliance"
+
+[cors]
+allow_origin = ["*"]
+allow_methods = ["GET", "POST", "OPTIONS"]
+
+[database]
+redis_url = "redis://127.0.0.1:6379"
+mongodb_url = "mongodb://127.0.0.1:27017"
+mongodb_database = "ark_vote"
+
+[snowflake]
+worker_id = 1
+datacenter_id = 1
+epoch = 1609459200000
+
+[nats]
+url = "127.0.0.1:4222"
+
+[[nats.consumers]]
+name = "new_compare_request"
+enabled = true
+subject = "ark-vote.new_compare_request"
+[[nats.consumers]]
+name = "save_score"
+enabled = true
+subject = "ark-vote.save_score"
+[[nats.consumers]]
+name = "dlq"
+enabled = true
+subject = "ark-vote.dlq"
+
+[nats.stream_config]
+name = "ark-vote"
+subjects = [
+    "ark-vote.new_compare_request",
+    "ark-vote.new_compare_response",
+    "ark-vote.save_score",
+    "ark-vote.dlq",
+]
+retention = "workqueue"
+max_messages = 100_000
+max_messages_per_subject = 100_000
+
+[sentry]
+dsn = ""
+
+[test]
+base_url = "http://127.0.0.1:3000"
+total_requests = 1000
+concurrency_limit = 10
+max_retry = 3
+qps_limit = 500
+
+[tracing]
+level = "debug"
+log_file_directory = "logs"

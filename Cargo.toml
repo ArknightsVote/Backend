@@ -1,0 +1,102 @@
+[package]
+name = "ark-vote"
+version.workspace = true
+edition.workspace = true
+
+[workspace]
+members = [
+    ".",
+    "services/nats-service",
+    "services/service-test",
+    "services/share",
+    "services/web-service",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+version = "0.2.0-dev"
+
+[workspace.dependencies]
+nats-service = { path = "services/nats-service" }
+service-test = { path = "services/service-test" }
+share = { path = "services/share" }
+web-service = { path = "services/web-service" }
+
+tokio = { version = "1.47.1", features = ["full"] }
+reqwest = { version = "0.12.22", features = ["json"] }
+futures = "0.3.31"
+
+axum = { version = "0.8.4", features = ["macros"] }
+tera = "1.20.0"
+tower = "0.5.2"
+tower-http = { version = "0.6.4", features = [
+    "cors",
+    "fs",
+    "timeout",
+    "trace",
+] }
+utoipa = { version = "5.4.0", features = ["uuid", "axum_extras", "chrono"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+utoipa-scalar = { version = "0.3", features = ["axum"] }
+
+chrono = { version = "0.4.41", features = ["serde"] }
+chrono-tz = "0.10.4"
+
+parking_lot = "0.12.4"
+
+thiserror = "2.0.12"
+eyre = "0.6.12"
+
+base64 = "0.22.1"
+toml = "0.9.5"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.142"
+dashmap = "6.1.0"
+
+async-nats = "0.42.0"
+redis = { version = "0.32.4", features = ["ahash", "cache-aio", "tokio-comp"] }
+mongodb = "3.2.3"
+
+governor = "0.10.0"
+hdrhistogram = "7.5.4"
+sentry = { version = "0.42.0", features = ["tower", "tower-http", "tracing"] }
+axum-prometheus = "0.8.0"
+
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["json", "env-filter"] }
+
+rand = "0.9.2"
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
+
+[dependencies]
+nats-service.workspace = true
+service-test.workspace = true
+share.workspace = true
+web-service.workspace = true
+
+tokio.workspace = true
+clap = { version = "4.5.42", features = ["cargo", "derive", "env"] }
+
+axum.workspace = true
+
+toml.workspace = true
+
+sentry.workspace = true
+serde.workspace = true
+
+eyre.workspace = true
+stable-eyre = "0.2.2"
+
+git-testament = "0.2.6"
+
+tracing.workspace = true
+
+mimalloc = "0.1.47"
+
+[profile.release]
+strip = true
+lto = "fat"
+opt-level = 3
+codegen-units = 1
