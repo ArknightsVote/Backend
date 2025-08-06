@@ -9,7 +9,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: arkvote
       MONGO_INITDB_ROOT_PASSWORD: arkvote_password
     volumes:
-      - mongodb_data:/data/db
+      - ./data/mongodb:/data/db
     networks:
       - arkvote_network
 
@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     networks:
       - arkvote_network
 
@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
     command: "--jetstream"
     volumes:
-      - nats_data:/var/lib/nats/data
+      - ./data/nats:/var/lib/nats/data
     networks:
       - arkvote_network
 
@@ -71,11 +71,6 @@ services:
     networks:
       - arkvote_network
     command: ["/app/ark-vote", "nats-consumer"]
-
-volumes:
-  mongodb_data:
-  redis_data:
-  nats_data:
 
 networks:
   arkvote_network:
