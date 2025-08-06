@@ -4,7 +4,7 @@ use axum::{Json, extract::State};
 use rand::seq::IndexedRandom as _;
 use redis::AsyncCommands as _;
 use share::models::{
-    api::{NewCompareRequest, NewCompareResponse},
+    api::{ApiMsg, ApiResponse, NewCompareRequest, NewCompareResponse},
     database::VotingTopicType,
 };
 
@@ -14,8 +14,6 @@ use crate::{
     constants::BALLOT_CODE_RANDOM_LENGTH,
     error::AppError,
 };
-
-use super::{ApiMsg, ApiResponse};
 
 fn select_operators(operator_ids: &[i32]) -> Result<(i32, i32), AppError> {
     if operator_ids.len() < 2 {
@@ -45,18 +43,18 @@ pub async fn new_compare(
     State(state): State<Arc<AppState>>,
     Json(req): Json<NewCompareRequest>,
 ) -> Result<Json<ApiResponse<NewCompareResponse>>, AppError> {
-    let topic = match state.voting_topics_cache.get(&req.topic_id) {
-        Some(topic) if topic.is_topic_active() => topic.clone(),
-        Some(_) => {
+    let topic = match state.topic_service.get_topic(&req.topic_id).await {
+        Ok(Some(topic)) if topic.is_topic_active() => topic,
+        Ok(_) => {
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 500,
                 data: None,
                 message: ApiMsg::TargetTopicNotActive,
             }));
         }
-        None => {
+        Err(_) => {
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 404,
                 data: None,
                 message: ApiMsg::TargetTopicNotFound,
             }));

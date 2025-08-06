@@ -2,14 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{Json, extract::State};
 use share::models::{
-    api::{FinalOrderItem, ViewFinalOrderRequest, ViewFinalOrderResponse},
+    api::{ApiMsg, ApiResponse, FinalOrderItem, ViewFinalOrderRequest, ViewFinalOrderResponse},
     database::CandidatePoolPreset,
     excel::CharacterInfo,
 };
 
 use crate::{AppState, error::AppError};
-
-use super::{ApiMsg, ApiResponse};
 
 #[derive(Debug)]
 struct OperatorResult {
@@ -101,18 +99,20 @@ pub async fn view_final_order(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ViewFinalOrderRequest>,
 ) -> Result<Json<ApiResponse<ViewFinalOrderResponse>>, AppError> {
-    let target_topic = match state.voting_topics_cache.get(&req.topic_id) {
-        Some(topic) if topic.topic_type.supports_final_order() => topic,
-        Some(_) => {
+    let target_topic = match state.topic_service.get_topic(&req.topic_id).await {
+        Ok(Some(topic)) if topic.topic_type.supports_final_order() => topic,
+        Ok(_) => {
+            tracing::debug!("Topic {} does not support final order", req.topic_id);
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 500,
                 data: None,
                 message: ApiMsg::CurTopicNotSupportFinalOrder,
             }));
         }
-        None => {
+        Err(_) => {
+            tracing::debug!("Topic {} not found", req.topic_id);
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 404,
                 data: None,
                 message: ApiMsg::TargetTopicNotFound,
             }));
@@ -123,6 +123,12 @@ pub async fn view_final_order(
         generate_operators_info(&target_topic.candidate_pool, &state.character_infos);
     let num_operators = operators_info.num_operators;
 
+    tracing::debug!(
+        "Generating final order for topic {} with {} operators",
+        req.topic_id,
+        num_operators
+    );
+
     let mut conn = state.redis.connection.clone();
 
     let (operator_values, total_valid_ballots): (Vec<Option<String>>, i64) = state
@@ -131,6 +137,12 @@ pub async fn view_final_order(
         .arg(&operators_info.op_stats_all_fields)
         .invoke_async(&mut conn)
         .await?;
+
+    tracing::debug!(
+        "Final order data for topic {}: {:?}",
+        req.topic_id,
+        operator_values
+    );
 
     let (win_counts, lose_counts) = parse_operator_counts(&operator_values, num_operators)?;
 

@@ -3,14 +3,12 @@ use std::sync::Arc;
 use axum::{Json, extract::State};
 use chrono::Utc;
 use share::models::{
-    api::{CreateTopicRequest, CreateTopicResponse},
+    api::{ApiMsg, ApiResponse, CreateTopicRequest, CreateTopicResponse},
     database::{CreateTopicStatus, VotingTopic},
 };
 use uuid::Uuid;
 
 use crate::{AppState, error::AppError};
-
-use super::{ApiMsg, ApiResponse};
 
 #[utoipa::path(
     post,
@@ -28,7 +26,6 @@ pub async fn create_topic(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateTopicRequest>,
 ) -> Result<Json<ApiResponse<CreateTopicResponse>>, AppError> {
-    let collection = state.mongodb.collection::<VotingTopic>("topics");
     let topic = VotingTopic {
         id: if req.id.is_empty() {
             Uuid::new_v4().to_string()
@@ -47,15 +44,24 @@ pub async fn create_topic(
         is_active: false,
         status: CreateTopicStatus::WaitingAudit,
     };
-    collection.insert_one(&topic).await?;
 
-    Ok(Json(ApiResponse {
-        status: 0,
-        data: Some(CreateTopicResponse {
-            id: topic.id,
-            is_active: topic.is_active,
-            status: topic.status,
-        }),
-        message: ApiMsg::OK,
-    }))
+    match state.topic_service.create_topic(&topic).await {
+        Ok(_) => Ok(Json(ApiResponse {
+            status: 0,
+            data: Some(CreateTopicResponse {
+                id: topic.id,
+                is_active: topic.is_active,
+                status: topic.status,
+            }),
+            message: ApiMsg::OK,
+        })),
+        Err(e) => {
+            tracing::error!("Failed to create topic: {}", e);
+            Ok(Json(ApiResponse {
+                status: 500,
+                data: None,
+                message: ApiMsg::TopicCreateFailed,
+            }))
+        }
+    }
 }

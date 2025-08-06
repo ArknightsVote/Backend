@@ -7,8 +7,9 @@ use hdrhistogram::Histogram;
 use reqwest::Client;
 use share::config::AppConfig;
 use share::models::api::{
-    NewCompareRequest, NewCompareResponse, Operators1v1MatrixResponse, PairwiseSaveScore,
-    SaveScoreRequest, ViewFinalOrderResponse,
+    ApiResponse, NewCompareRequest, NewCompareResponse, Operators1v1MatrixRequest,
+    Operators1v1MatrixResponse, PairwiseSaveScore, SaveScoreRequest, ViewFinalOrderRequest,
+    ViewFinalOrderResponse,
 };
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -63,7 +64,14 @@ impl ServiceTester {
             None
         };
 
-        let init_data = self.get_final_order(&client).await?;
+        let init_data = self
+            .get_final_order(
+                &client,
+                &ViewFinalOrderRequest {
+                    topic_id: "crisis_v2_season_4_1".to_string(),
+                },
+            )
+            .await?;
         let init_score: i64 = init_data.items.iter().map(|i| i.win + i.lose).sum();
 
         let semaphore = Arc::new(Semaphore::new(self.concurrency_limit));
@@ -158,7 +166,14 @@ impl ServiceTester {
             );
         }
 
-        let final_data = self.get_final_order(&client).await?;
+        let final_data = self
+            .get_final_order(
+                &client,
+                &ViewFinalOrderRequest {
+                    topic_id: "crisis_v2_season_4_1".to_string(),
+                },
+            )
+            .await?;
         let final_score: i64 = final_data.items.iter().map(|i| i.win + i.lose).sum();
 
         assert_eq!(
@@ -204,7 +219,16 @@ impl ServiceTester {
             attempt += 1;
             let start = Instant::now();
 
-            let compare = match self.post_new_compare(&client).await {
+            let compare = match self
+                .post_new_compare(
+                    &client,
+                    &NewCompareRequest {
+                        topic_id: "crisis_v2_season_4_1".to_string(),
+                        ballot_id: "".to_string(),
+                    },
+                )
+                .await
+            {
                 Ok(c) => c,
                 Err(e) => {
                     tracing::warn!("new compare failed: {e}");
@@ -256,9 +280,29 @@ impl ServiceTester {
     async fn check_endpoints_available(&self) -> Result<()> {
         let client = Client::new();
 
-        self.get_final_order(&client).await?;
-        self.get_operators_1v1_matrix(&client).await?;
-        let data = self.post_new_compare(&client).await?;
+        self.get_final_order(
+            &client,
+            &ViewFinalOrderRequest {
+                topic_id: "crisis_v2_season_4_1".to_string(),
+            },
+        )
+        .await?;
+        self.operators_1v1_matrix(
+            &client,
+            &Operators1v1MatrixRequest {
+                topic_id: "crisis_v2_season_4_1".to_string(),
+            },
+        )
+        .await?;
+        let data = self
+            .post_new_compare(
+                &client,
+                &NewCompareRequest {
+                    topic_id: "crisis_v2_season_4_1".to_string(),
+                    ballot_id: "".to_string(),
+                },
+            )
+            .await?;
         let (left, right, ballot_id) = match data {
             NewCompareResponse::Pairwise {
                 left,
@@ -285,44 +329,70 @@ impl ServiceTester {
         Ok(())
     }
 
-    async fn get_final_order(&self, client: &Client) -> Result<ViewFinalOrderResponse> {
+    async fn get_final_order(
+        &self,
+        client: &Client,
+        data: &ViewFinalOrderRequest,
+    ) -> Result<ViewFinalOrderResponse> {
         let res = client
-            .get(format!("{}/view_final_order", self.base_url))
+            .post(format!("{}/view_final_order", self.base_url))
+            .json(data)
             .send()
             .await
             .context("get view_final_order failed")?;
 
-        res.json::<ViewFinalOrderResponse>()
+        let response = res
+            .json::<ApiResponse<ViewFinalOrderResponse>>()
             .await
-            .context("parsing view_final_order failed")
+            .context("parsing view_final_order failed")?;
+
+        response
+            .data
+            .ok_or_else(|| eyre::eyre!("view_final_order response data is missing"))
     }
 
-    async fn get_operators_1v1_matrix(
+    async fn operators_1v1_matrix(
         &self,
         client: &Client,
+        data: &Operators1v1MatrixRequest,
     ) -> Result<Operators1v1MatrixResponse> {
         let res = client
-            .get(format!("{}/get_operators_1v1_matrix", self.base_url))
+            .post(format!("{}/operators_1v1_matrix", self.base_url))
+            .json(data)
             .send()
             .await
-            .context("get get_operators_1v1_matrix failed")?;
+            .context("get operators_1v1_matrix failed")?;
 
-        res.json::<Operators1v1MatrixResponse>()
+        let response = res
+            .json::<ApiResponse<Operators1v1MatrixResponse>>()
             .await
-            .context("parsing get_operators_1v1_matrix failed")
+            .context("parsing operators_1v1_matrix failed")?;
+
+        response
+            .data
+            .ok_or_else(|| eyre::eyre!("operators_1v1_matrix response data is missing"))
     }
 
-    async fn post_new_compare(&self, client: &Client) -> Result<NewCompareResponse> {
+    async fn post_new_compare(
+        &self,
+        client: &Client,
+        data: &NewCompareRequest,
+    ) -> Result<NewCompareResponse> {
         let res = client
             .post(format!("{}/new_compare", self.base_url))
-            .json(&NewCompareRequest::default())
+            .json(data)
             .send()
             .await
             .context("post new_compare failed")?;
 
-        res.json::<NewCompareResponse>()
+        let response = res
+            .json::<ApiResponse<NewCompareResponse>>()
             .await
-            .context("parsing new_compare failed")
+            .context("parsing new_compare response failed")?;
+
+        response
+            .data
+            .ok_or_else(|| eyre::eyre!("new_compare response data is missing"))
     }
 
     async fn post_save_score(&self, client: &Client, data: SaveScoreRequest) -> Result<()> {

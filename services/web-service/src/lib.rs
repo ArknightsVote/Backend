@@ -3,6 +3,8 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 mod api;
 mod constants;
 mod error;
+mod service;
+mod state;
 mod utils;
 
 use async_nats::jetstream;
@@ -13,7 +15,6 @@ use axum::{
     routing::get,
 };
 use axum_prometheus::PrometheusMetricLayer;
-use dashmap::DashMap;
 use eyre::Context;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use share::{
@@ -28,27 +29,13 @@ use utoipa::OpenApi as _;
 use utoipa_scalar::{Scalar, Servable as _};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{api::ApiDoc, constants::LUA_SCRIPT_GET_FINAL_ORDER, error::AppError};
-
-#[derive(Clone)]
-pub(crate) struct RedisService {
-    pub _client: redis::Client,
-    pub connection: redis::aio::MultiplexedConnection,
-    pub final_order_script: redis::Script,
-}
-
-#[derive(Clone)]
-pub(crate) struct AppState {
-    pub redis: RedisService,
-    pub mongodb: mongodb::Database,
-    pub jetstream: async_nats::jetstream::Context,
-    pub snowflake: Snowflake,
-    pub character_infos: Vec<CharacterInfo>,
-    pub tera: Tera,
-
-    /// Cache for voting topics information.
-    pub voting_topics_cache: Arc<DashMap<String, VotingTopic>>,
-}
+use crate::{
+    api::ApiDoc,
+    constants::LUA_SCRIPT_GET_FINAL_ORDER,
+    error::AppError,
+    service::TopicService,
+    state::{AppState, RedisService},
+};
 
 async fn page_handler(State(app_state): State<Arc<AppState>>) -> impl IntoResponse {
     let html = app_state
@@ -159,7 +146,7 @@ impl WebService {
         let tera = Tera::new("templates/**/*").context("failed to load Tera templates")?;
         tracing::debug!("Tera templates loaded");
 
-        let voting_topics_cache = Arc::new(DashMap::new());
+        let topic_service = TopicService::new(mongodb.clone());
 
         let state = AppState {
             jetstream,
@@ -168,15 +155,13 @@ impl WebService {
                 connection,
                 final_order_script: redis::Script::new(LUA_SCRIPT_GET_FINAL_ORDER),
             },
-            mongodb,
+            _mongodb: mongodb,
             snowflake,
             character_infos,
             tera,
 
-            voting_topics_cache: voting_topics_cache.clone(),
+            topic_service,
         };
-
-        utils::spawn_pool_updater(state.mongodb.clone(), voting_topics_cache).await?;
 
         let sentry_layer = ServiceBuilder::new()
             .layer(NewSentryLayer::new_from_top())

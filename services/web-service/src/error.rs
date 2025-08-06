@@ -1,7 +1,6 @@
 use axum::{Json, http::StatusCode};
 use redis::RedisError;
-
-use crate::api::{ApiMsg, ApiResponse};
+use share::models::api::{ApiMsg, ApiResponse};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AppError {

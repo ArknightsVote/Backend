@@ -79,6 +79,12 @@ pub struct TopicAuditInfo {
     pub audit_category: AuditCategory, // 审核类别
 }
 
+impl TopicAuditInfo {
+    pub fn is_approved(&self) -> bool {
+        matches!(self.audit_category, AuditCategory::ContentCompliance)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum CreateTopicStatus {
     WaitingAudit,
@@ -86,7 +92,7 @@ pub enum CreateTopicStatus {
     Rejected(TopicAuditInfo),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VotingTopic {
     pub id: String,
     pub name: String,

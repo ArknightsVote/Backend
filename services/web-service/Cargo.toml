@@ -40,3 +40,6 @@ tracing.workspace = true
 
 rand.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true

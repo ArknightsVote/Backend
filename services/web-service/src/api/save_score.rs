@@ -6,13 +6,11 @@ use axum::{
     http::HeaderMap,
 };
 use share::models::{
-    api::{PairwiseSaveScore, SaveScoreRequest, SaveScoreResponse},
+    api::{ApiMsg, ApiResponse, PairwiseSaveScore, SaveScoreRequest, SaveScoreResponse},
     database::{Ballot, BallotInfo, PairwiseBallot},
 };
 
 use crate::{AppState, api::utils::publish_and_ack, error::AppError};
-
-use super::{ApiMsg, ApiResponse};
 
 #[utoipa::path(
     post,
@@ -33,27 +31,41 @@ pub async fn save_score(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SaveScoreRequest>,
 ) -> Result<Json<ApiResponse<SaveScoreResponse>>, AppError> {
-    let _target_topic = match state.voting_topics_cache.get(req.topic_id()) {
-        Some(topic) if topic.is_topic_active() && topic.topic_type.matches_request(&req) => {
-            topic.clone()
+    let _target_topic = match state.topic_service.get_topic(req.topic_id()).await {
+        Ok(Some(topic)) if topic.is_topic_active() && topic.topic_type.matches_request(&req) => {
+            topic
         }
-        Some(topic) if !topic.topic_type.matches_request(&req) => {
+        Ok(Some(topic)) if !topic.topic_type.matches_request(&req) => {
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 500,
                 data: None,
                 message: ApiMsg::RequestTopicTypeMismatch,
             }));
         }
-        Some(_) => {
+        Ok(Some(topic)) if !topic.is_topic_active() => {
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 500,
                 data: None,
                 message: ApiMsg::TargetTopicNotActive,
             }));
         }
-        None => {
+        Ok(None) => {
             return Ok(Json(ApiResponse {
-                status: 1,
+                status: 404,
+                data: None,
+                message: ApiMsg::TargetTopicNotFound,
+            }));
+        }
+        Ok(Some(_)) => {
+            return Ok(Json(ApiResponse {
+                status: 500,
+                data: None,
+                message: ApiMsg::InternalError,
+            }));
+        }
+        Err(_) => {
+            return Ok(Json(ApiResponse {
+                status: 404,
                 data: None,
                 message: ApiMsg::TargetTopicNotFound,
             }));
