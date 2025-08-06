@@ -24,22 +24,14 @@ jobs:
         with:
           toolchain: stable
 
+      - name: install rust-cache
+        uses: Swatinem/rust-cache@v2
+
       - name: Build with cargo
         run: cargo build --release
 
-      - name: Set binary name
-        id: bin
-        run: |
-          echo "name=ark-vote" >> $GITHUB_OUTPUT
-
-      - name: Rename output binary (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Rename-Item target/release/${{ steps.bin.outputs.name }} target/release/${{ steps.bin.outputs.name }}.exe
-
-      - name: Upload binary artifact
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.bin.outputs.name }}-${{ matrix.os }}
-          path: |
-            target/release/${{ steps.bin.outputs.name }}*
+          name: ${{ runner.os }}-release
+          path: ${{ runner.os == 'Windows' && 'target/release/ark-vote.exe' || 'target/release/ark-vote' }}
