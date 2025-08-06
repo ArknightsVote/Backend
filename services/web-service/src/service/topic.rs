@@ -242,7 +242,7 @@ impl TopicService {
 
             match Self::incremental_cache_update(&topic_collection, &topic_cache).await {
                 Ok(updated_count) => {
-                    tracing::info!(
+                    tracing::debug!(
                         "Incremental cache update completed: {} topics updated",
                         updated_count
                     );
@@ -252,7 +252,7 @@ impl TopicService {
                     if let Err(e) = Self::full_cache_update(&topic_collection, &topic_cache).await {
                         tracing::error!("Full cache update failed: {}", e);
                     } else {
-                        tracing::info!("Full cache update completed successfully.");
+                        tracing::debug!("Full cache update completed successfully.");
                     }
                 }
             }
