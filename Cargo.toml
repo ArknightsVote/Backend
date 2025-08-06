@@ -95,6 +95,9 @@ tracing.workspace = true
 
 mimalloc = "0.1.47"
 
+[target.'cfg(target_os = "linux")']
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
 [profile.release]
 strip = true
 lto = "fat"

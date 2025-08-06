@@ -24,8 +24,11 @@ jobs:
         with:
           toolchain: stable
 
-      - name: install rust-cache
+      - name: Install rust-cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Install mold
+        uses: rui314/setup-mold@v1
 
       - name: Build with cargo
         run: cargo build --release
