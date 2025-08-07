@@ -118,7 +118,7 @@ impl VotingTopic {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BallotInfo<'a> {
     pub topic_id: Cow<'a, str>,
     pub ballot_id: Cow<'a, str>,
@@ -127,7 +127,7 @@ pub struct BallotInfo<'a> {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PairwiseBallot<'a> {
     pub info: BallotInfo<'a>,
     pub win: i32,

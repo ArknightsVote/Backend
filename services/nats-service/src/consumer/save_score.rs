@@ -9,7 +9,9 @@ use futures::StreamExt as _;
 use redis::AsyncCommands as _;
 use share::{
     config::{AppConfig, VoteConfig},
-    models::database::{Ballot, StoredBallot},
+    models::database::{
+        Ballot, GroupwiseBallot, PairwiseBallot, PluralityBallot, SetwiseBallot, StoredBallot,
+    },
 };
 
 use crate::{
@@ -21,11 +23,10 @@ use crate::{
 
 use super::normalize_subject;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct BatchProcessResult {
     success_count: usize,
     failed_messages: Vec<async_nats::jetstream::Message>,
-    invalid_messages: Vec<async_nats::jetstream::Message>,
 }
 
 pub async fn save_score_consumer(
@@ -80,6 +81,98 @@ pub async fn save_score_consumer(
     Ok(())
 }
 
+struct PairwiseBallotItem<'a> {
+    ballot: PairwiseBallot<'a>,
+    message: async_nats::jetstream::Message,
+}
+
+#[allow(dead_code)]
+struct SetwiseBallotItem<'a> {
+    ballot: SetwiseBallot<'a>,
+    message: async_nats::jetstream::Message,
+}
+
+#[allow(dead_code)]
+struct GroupwiseBallotItem<'a> {
+    ballot: GroupwiseBallot<'a>,
+    message: async_nats::jetstream::Message,
+}
+
+#[allow(dead_code)]
+struct PluralityBallotItem<'a> {
+    ballot: PluralityBallot<'a>,
+    message: async_nats::jetstream::Message,
+}
+
+struct BallotMessageGroup<'a> {
+    pairwise: Vec<PairwiseBallotItem<'a>>,
+    setwise: Vec<SetwiseBallotItem<'a>>,
+    groupwise: Vec<GroupwiseBallotItem<'a>>,
+    plurality: Vec<PluralityBallotItem<'a>>,
+}
+
+impl<'a> BallotMessageGroup<'a> {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            pairwise: Vec::with_capacity(capacity),
+            setwise: Vec::with_capacity(capacity),
+            groupwise: Vec::with_capacity(capacity),
+            plurality: Vec::with_capacity(capacity),
+        }
+    }
+
+    fn add(
+        &mut self,
+        message: async_nats::jetstream::Message,
+    ) -> Option<async_nats::jetstream::Message> {
+        match serde_json::from_slice::<Ballot>(&message.payload) {
+            Ok(Ballot::Pairwise(ballot)) => {
+                self.pairwise.push(PairwiseBallotItem { ballot, message });
+                None
+            }
+            Ok(Ballot::Setwise(ballot)) => {
+                self.setwise.push(SetwiseBallotItem { ballot, message });
+                None
+            }
+            Ok(Ballot::Groupwise(ballot)) => {
+                self.groupwise.push(GroupwiseBallotItem { ballot, message });
+                None
+            }
+            Ok(Ballot::Plurality(ballot)) => {
+                self.plurality.push(PluralityBallotItem { ballot, message });
+                None
+            }
+            Err(e) => {
+                tracing::warn!("invalid ballot format: {}. acknowledging message.", e);
+                Some(message)
+            }
+        }
+    }
+
+    fn take_all(
+        &mut self,
+    ) -> (
+        Vec<PairwiseBallotItem<'a>>,
+        Vec<SetwiseBallotItem<'a>>,
+        Vec<GroupwiseBallotItem<'a>>,
+        Vec<PluralityBallotItem<'a>>,
+    ) {
+        (
+            std::mem::take(&mut self.pairwise),
+            std::mem::take(&mut self.setwise),
+            std::mem::take(&mut self.groupwise),
+            std::mem::take(&mut self.plurality),
+        )
+    }
+
+    fn is_empty(&self) -> bool {
+        self.pairwise.is_empty()
+            && self.setwise.is_empty()
+            && self.groupwise.is_empty()
+            && self.plurality.is_empty()
+    }
+}
+
 async fn process_save_score_messages(
     consumer: &async_nats::jetstream::consumer::Consumer<
         async_nats::jetstream::consumer::pull::Config,
@@ -89,7 +182,7 @@ async fn process_save_score_messages(
     app_config: &AppConfig,
 ) -> Result<(), AppError> {
     let mut count = 0;
-    let mut batch_messages = Vec::with_capacity(CONSUMER_BATCH_SIZE);
+    let mut ballot_groups = BallotMessageGroup::with_capacity(CONSUMER_BATCH_SIZE);
 
     loop {
         let mut messages = consumer
@@ -100,7 +193,15 @@ async fn process_save_score_messages(
 
         while let Some(message) = messages.next().await {
             match message {
-                Ok(msg) => batch_messages.push(msg),
+                Ok(msg) => {
+                    let invalid_message = ballot_groups.add(msg);
+                    if let Some(invalid_msg) = invalid_message {
+                        tracing::warn!("invalid ballot format in message, acknowledging.");
+                        if let Err(e) = invalid_msg.double_ack().await {
+                            tracing::error!("failed to double_ack invalid message: {}", e);
+                        }
+                    }
+                }
                 Err(e) => {
                     tracing::error!("error getting message: {}", e);
                     continue;
@@ -108,11 +209,13 @@ async fn process_save_score_messages(
             }
         }
 
-        if batch_messages.is_empty() {
+        if ballot_groups.is_empty() {
             continue;
         }
 
-        match process_ballot_batch(&batch_messages, conn, database, app_config).await {
+        let (pairwise, _, _, _) = ballot_groups.take_all();
+
+        match process_pairwise_ballot_batch(&pairwise, conn, database, app_config).await {
             Ok(result) => {
                 count += result.success_count;
 
@@ -134,190 +237,163 @@ async fn process_save_score_messages(
                         tracing::error!("failed to double_ack failed message: {}", e);
                     }
                 }
-
-                // 处理无效消息（直接确认）
-                for msg in result.invalid_messages {
-                    tracing::warn!(
-                        "invalid ballot format or participants: {:?}. acknowledging message.",
-                        msg
-                    );
-                    if let Err(e) = msg.double_ack().await {
-                        tracing::error!("failed to double_ack invalid message: {}", e);
-                    }
-                }
             }
             Err(e) => {
                 tracing::error!("batch processing failed: {}", e);
-                // 如果批量处理失败，回退到单个处理
-                for msg in batch_messages.iter() {
+                for msg in pairwise.iter() {
                     if let Err(e) =
-                        process_single_message_fallback(msg, conn, database, app_config).await
+                        process_single_pairwise_fallback(msg, conn, database, app_config).await
                     {
                         tracing::error!("fallback processing failed: {}", e);
                     }
                 }
             }
         }
-
-        batch_messages.clear();
     }
 }
 
-async fn process_ballot_batch(
-    messages: &[async_nats::jetstream::Message],
+async fn process_pairwise_ballot_batch(
+    ballots: &[PairwiseBallotItem<'_>],
     conn: &mut redis::aio::MultiplexedConnection,
     database: &AppDatabase,
     app_config: &AppConfig,
 ) -> Result<BatchProcessResult, AppError> {
-    let vote_config = &app_config.vote;
+    if ballots.is_empty() {
+        return Ok(BatchProcessResult::default());
+    }
 
-    let mut ballots = Vec::new();
-    let mut message_ballot_map = HashMap::new();
-    let mut invalid_messages = Vec::new();
+    let vote_config = &app_config.vote;
     let mut failed_messages = Vec::new();
 
-    // 第一步：解析所有ballot
-    for (idx, msg) in messages.iter().enumerate() {
-        match serde_json::from_slice::<Ballot>(&msg.payload) {
-            Ok(ballot) => {
-                let ballot = match ballot {
-                    Ballot::Pairwise(ballot) => ballot,
-                    _ => {
-                        tracing::warn!("unsupported ballot type in batch processing");
-                        continue;
-                    }
-                };
-                ballots.push((idx, ballot));
-                message_ballot_map.insert(idx, msg);
-            }
-            Err(e) => {
-                tracing::warn!("invalid ballot format: {}. acknowledging message.", e);
-                invalid_messages.push(msg.clone());
-            }
-        }
-    }
-
-    if ballots.is_empty() {
-        return Ok(BatchProcessResult {
-            success_count: 0,
-            failed_messages,
-            invalid_messages,
-        });
-    }
-
-    // 第二步：批量验证ballot codes
-    let ballot_codes: HashSet<&str> = ballots
-        .iter()
-        .map(|(_, b)| b.info.ballot_id.as_ref())
-        .collect();
+    // 第一步：批量验证ballot codes
     let validation_results =
-        batch_validate_ballots(ballot_codes, &database.redis.get_del_many_script, conn).await?;
+        validate_pairwise_ballots(ballots, &database.redis.get_del_many_script, conn).await?;
 
-    // 第三步：批量计算IP倍数
-    let ips: HashSet<&str> = ballots.iter().map(|(_, b)| b.info.ip.as_ref()).collect();
-    let ip_multipliers = batch_calculate_multipliers(
-        ips,
+    // 第二步：批量计算IP倍数
+    let ip_multipliers = calculate_pairwise_multipliers(
+        ballots,
         vote_config,
         &database.redis.batch_ip_counter_script,
         conn,
     )
     .await?;
 
-    // 第四步：过滤有效的ballot并准备批量操作
+    // 第三步：过滤有效的ballot并准备批量操作
     let mut valid_ballots = Vec::new();
     let mut score_updates = HashMap::new(); // (win_id, lose_id) -> total_multiplier
-    let mut stored_ballots = Vec::new();
 
-    for (idx, ballot) in ballots {
-        let msg = message_ballot_map.remove(&idx).unwrap();
-
+    for item in ballots.iter() {
         // 验证ballot code
         let (ballot_left, ballot_right) =
-            match validation_results.get(ballot.info.ballot_id.as_ref()) {
+            match validation_results.get(item.ballot.info.ballot_id.as_ref()) {
                 Some(Ok((left, right))) => (*left, *right),
                 Some(Err(_)) | None => {
-                    failed_messages.push(msg.clone());
+                    failed_messages.push(item.message.clone());
                     continue;
                 }
             };
 
         let valid_ids = [ballot_left, ballot_right];
-        if !valid_ids.contains(&ballot.win)
-            || !valid_ids.contains(&ballot.lose)
-            || ballot.win == ballot.lose
+        if !valid_ids.contains(&item.ballot.win)
+            || !valid_ids.contains(&item.ballot.lose)
+            || item.ballot.win == item.ballot.lose
         {
             tracing::warn!(
                 "invalid ballot participants: win={}, lose={} for code={}",
-                ballot.win,
-                ballot.lose,
-                ballot.info.ballot_id
+                item.ballot.win,
+                item.ballot.lose,
+                item.ballot.info.ballot_id
             );
-            invalid_messages.push(msg.clone());
+            failed_messages.push(item.message.clone());
             continue;
         }
 
         let multiplier = ip_multipliers
-            .get(ballot.info.ip.as_ref())
+            .get(item.ballot.info.ip.as_ref())
             .copied()
             .unwrap_or(vote_config.low_multiplier);
 
-        *score_updates.entry((ballot.win, ballot.lose)).or_insert(0) += multiplier;
+        *score_updates
+            .entry((
+                item.ballot.info.topic_id.to_string(),
+                item.ballot.win,
+                item.ballot.lose,
+            ))
+            .or_insert(0) += multiplier;
+
+        valid_ballots.push(item);
+    }
+
+    // 第四步：批量执行分数更新
+    batch_update_scores(
+        score_updates,
+        &database.redis.batch_score_update_script,
+        conn,
+    )
+    .await?;
+
+    // 第五步：批量插入MongoDB
+    // 先按照topic_id分组
+    let mut grouped_ballots: HashMap<String, Vec<StoredBallot>> = HashMap::new();
+
+    for item in valid_ballots.iter() {
+        let topic_id = item.ballot.info.topic_id.to_string();
+        let multiplier = ip_multipliers
+            .get(item.ballot.info.ip.as_ref())
+            .copied()
+            .unwrap_or(vote_config.low_multiplier);
 
         let stored_ballot = StoredBallot {
-            ballot: Ballot::Pairwise(ballot),
+            ballot: Ballot::Pairwise(item.ballot.clone()),
             multiplier,
         };
-        stored_ballots.push(stored_ballot);
 
-        valid_ballots.push(msg);
-    }
-    let valid_ballots_count = valid_ballots.len();
-
-    // 第五步：批量执行分数更新
-    if !score_updates.is_empty() {
-        batch_update_scores(
-            score_updates,
-            valid_ballots_count,
-            &database.redis.batch_score_update_script,
-            conn,
-        )
-        .await?;
+        grouped_ballots
+            .entry(topic_id)
+            .or_default()
+            .push(stored_ballot);
     }
 
-    // 第六步：批量插入MongoDB
-    if !stored_ballots.is_empty() {
+    for (topic_id, ballots) in grouped_ballots.into_iter() {
         let ballot_collection = database
             .mongo_database
-            .collection::<StoredBallot>("ballots");
-        ballot_collection.insert_many(&stored_ballots).await?;
+            .collection::<StoredBallot>(&format!("ballots_{}", topic_id));
+
+        ballot_collection.insert_many(&ballots).await?;
     }
 
-    // 第七步：确认所有成功处理的消息
-    for msg in valid_ballots {
-        if let Err(e) = msg.double_ack().await {
+    // 第六步：确认所有成功处理的消息
+    for msg in valid_ballots.iter() {
+        if let Err(e) = msg.message.double_ack().await {
             tracing::error!("failed to double_ack successful message: {}", e);
         }
     }
 
     Ok(BatchProcessResult {
-        success_count: valid_ballots_count,
+        success_count: valid_ballots.len(),
         failed_messages,
-        invalid_messages,
     })
 }
 
-async fn batch_validate_ballots(
-    codes: HashSet<&str>,
+async fn validate_pairwise_ballots(
+    ballots: &[PairwiseBallotItem<'_>],
     get_del_many_script: &redis::Script,
     conn: &mut redis::aio::MultiplexedConnection,
 ) -> Result<HashMap<String, Result<(i32, i32), AppError>>, AppError> {
-    if codes.is_empty() {
+    if ballots.is_empty() {
         return Ok(HashMap::new());
     }
 
-    let code_keys: Vec<(String, &str)> = codes
+    let code_keys: Vec<(String, &str)> = ballots
         .iter()
-        .map(|code| (format!("ballot:{code}"), *code))
+        .map(|item| {
+            let info = &item.ballot.info;
+
+            (
+                format!("{}:ballot:{}", info.topic_id, info.ballot_id),
+                info.ballot_id.as_ref(),
+            )
+        })
         .collect();
 
     let keys: Vec<String> = code_keys.iter().map(|(k, _)| k.clone()).collect();
@@ -357,19 +433,28 @@ async fn batch_validate_ballots(
     Ok(results)
 }
 
-async fn batch_calculate_multipliers(
-    ips: HashSet<&str>,
+async fn calculate_pairwise_multipliers(
+    ballots: &[PairwiseBallotItem<'_>],
     vote_config: &VoteConfig,
     batch_ip_counter_script: &redis::Script,
     conn: &mut redis::aio::MultiplexedConnection,
 ) -> Result<HashMap<String, i32>, AppError> {
-    let mut results = HashMap::new();
-
-    if ips.is_empty() {
-        return Ok(results);
+    if ballots.is_empty() {
+        return Ok(HashMap::new());
     }
 
-    let keys: Vec<String> = ips.iter().map(|ip| format!("ip_counter:{ip}")).collect();
+    let mut results = HashMap::new();
+
+    let ips: HashSet<&str> = ballots.iter().map(|b| b.ballot.info.ip.as_ref()).collect();
+
+    let keys: Vec<String> = ballots
+        .iter()
+        .map(|b| {
+            let info = &b.ballot.info;
+            format!("{}:ip_counter:{}", info.topic_id.as_ref(), info.ip.as_ref())
+        })
+        .collect();
+
     let ips_vec: Vec<&str> = ips.into_iter().collect();
 
     let script_results: Vec<i32> = batch_ip_counter_script
@@ -389,8 +474,7 @@ async fn batch_calculate_multipliers(
 }
 
 async fn batch_update_scores(
-    updates: HashMap<(i32, i32), i32>, // ((win_id, lose_id), total_multiplier)
-    valid_ballots_count: usize,
+    updates: HashMap<(String, i32, i32), i32>, // ((topic_id, win_id, lose_id), total_multiplier)
     batch_score_update_script: &redis::Script,
     conn: &mut redis::aio::MultiplexedConnection,
 ) -> Result<(), AppError> {
@@ -398,17 +482,17 @@ async fn batch_update_scores(
         return Ok(());
     }
 
-    // 准备参数：win_id1, lose_id1, multiplier1, win_id2, lose_id2, multiplier2, ...
-    let mut args = Vec::with_capacity(updates.len() * 3);
-    for ((win_id, lose_id), multiplier) in updates {
-        args.push(win_id);
-        args.push(lose_id);
-        args.push(multiplier);
+    // 准备参数：topic_id1, win_id1, lose_id1, multiplier1, topic_id2, win_id2, lose_id2, multiplier2, ...
+    let mut args = Vec::with_capacity(updates.len() * 4);
+    for ((topic_id, win_id, lose_id), multiplier) in updates {
+        args.push(topic_id);
+        args.push(win_id.to_string());
+        args.push(lose_id.to_string());
+        args.push(multiplier.to_string());
     }
 
     // 执行批量分数更新脚本
     let _results: () = batch_score_update_script
-        .key(valid_ballots_count as i32) // 传递总有效投票数
         .arg(&args)
         .invoke_async(conn)
         .await?;
@@ -417,27 +501,27 @@ async fn batch_update_scores(
 }
 
 // 回退处理单个消息（当批量处理失败时使用）
-async fn process_single_message_fallback(
-    msg: &async_nats::jetstream::Message,
+async fn process_single_pairwise_fallback(
+    msg: &PairwiseBallotItem<'_>,
     conn: &mut redis::aio::MultiplexedConnection,
     database: &AppDatabase,
     app_config: &AppConfig,
 ) -> Result<(), AppError> {
-    match process_single_ballot(&msg.payload, conn, database, app_config).await {
+    match process_single_ballot(&msg.ballot, conn, database, app_config).await {
         Ok(_) => {
-            msg.double_ack().await?;
+            msg.message.double_ack().await?;
         }
         Err(e) => {
             if e.is_need_send_to_dlq() {
                 tracing::error!("failed to process ballot: {}. Sending to DLQ.", e);
-                handle_failed_messages(&database.jetstream, (msg, &e)).await?;
+                handle_failed_messages(&database.jetstream, (&msg.message, &e)).await?;
             } else {
                 tracing::warn!(
                     "invalid ballot format or participants: {}. acknowledging message.",
                     e
                 );
             }
-            msg.double_ack().await?;
+            msg.message.double_ack().await?;
         }
     }
     Ok(())
@@ -512,22 +596,12 @@ async fn handle_failed_messages(
 }
 
 async fn process_single_ballot(
-    payload: &[u8],
+    ballot: &PairwiseBallot<'_>,
     conn: &mut redis::aio::MultiplexedConnection,
     database: &AppDatabase,
     app_config: &AppConfig,
 ) -> Result<(), AppError> {
     let vote_config = &app_config.vote;
-    let ballot: Ballot = serde_json::from_slice(payload)?;
-    let ballot = match ballot {
-        Ballot::Pairwise(ballot) => ballot,
-        _ => {
-            tracing::warn!("unsupported ballot type in single processing");
-            return Err(AppError::InvalidBallotFormat(
-                "unsupported ballot type".to_string(),
-            ));
-        }
-    };
 
     let (ballot_left, ballot_right) = validate_ballot(ballot.info.ballot_id.as_ref(), conn).await?;
 
@@ -562,7 +636,7 @@ async fn process_single_ballot(
         .invoke_async(conn)
         .await?;
 
-    let ballot = Ballot::Pairwise(ballot);
+    let ballot = Ballot::Pairwise(ballot.clone());
     let stored_ballot = StoredBallot { ballot, multiplier };
 
     let ballot_collection = database

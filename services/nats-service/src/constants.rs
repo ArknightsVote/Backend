@@ -69,29 +69,34 @@ return results
 
 pub const LUA_SCRIPT_BATCH_SCORE_UPDATE_SCRIPT: &str = r#"
 -- KEYS: empty (we use ARGV for dynamic key generation)
--- ARGV: win_id1, lose_id1, multiplier1, win_id2, lose_id2, multiplier2, ...
--- Each score update takes 3 arguments: win_id, lose_id, multiplier
+-- ARGV: topic_id1, win_id1, lose_id1, multiplier1, topic_id2, win_id2, lose_id2, multiplier2, ...
+-- Each score update takes 4 arguments: topic_id, win_id, lose_id, multiplier
 
-local valid_ballots_count = KEYS[1]
+-- local valid_ballots_count = KEYS[1]
 local arg_count = #ARGV
 
--- 确保参数数量是3的倍数
-if arg_count % 3 ~= 0 then
-    return redis.error_reply("invalid argument count: must be multiple of 3")
+-- 确保参数数量是4的倍数
+if arg_count % 4 ~= 0 then
+    return redis.error_reply("invalid argument count: must be multiple of 4")
 end
 
-for i = 1, arg_count, 3 do
-    local win_id = ARGV[i]
-    local lose_id = ARGV[i + 1]
-    local multiplier = ARGV[i + 2]
+for i = 1, arg_count, 4 do
+    local topic_id = ARGV[i]
+    local win_id = tonumber(ARGV[i + 1])
+    local lose_id = tonumber(ARGV[i + 2])
+    local multiplier = tonumber(ARGV[i + 3])
 
-    redis.call("HINCRBY", "op_stats", win_id..":win", multiplier)
-    redis.call("HINCRBY", "op_stats", lose_id..":lose", multiplier)
-    redis.call("HINCRBY", "op_matrix", win_id..":"..lose_id, multiplier)
-    redis.call("HINCRBY", "op_matrix", lose_id..":"..win_id, -multiplier)
+    local op_stats_key = topic_id .. ":op_stats"
+    local op_matrix_key = topic_id .. ":op_matrix"
+
+    redis.call("HINCRBY", op_stats_key, win_id..":win", multiplier)
+    redis.call("HINCRBY", op_stats_key, lose_id..":lose", multiplier)
+    redis.call("HINCRBY", op_matrix_key, win_id..":"..lose_id, multiplier)
+    redis.call("HINCRBY", op_matrix_key, lose_id..":"..win_id, -multiplier)
+
+    local valid_ballots_key = topic_id .. ":valid_ballots_count"
+    redis.call("INCR", valid_ballots_key)
 end
-
-redis.call("INCRBY", "total_valid_ballots", valid_ballots_count)
 
 return 1
 "#;

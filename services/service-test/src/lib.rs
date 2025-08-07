@@ -256,7 +256,7 @@ impl ServiceTester {
                 loser: right,
             });
 
-            match self.post_save_score(&client, data).await {
+            match self.post_save_score(&client, &data).await {
                 Ok(_) => {
                     let latency = start.elapsed().as_micros() as u64;
                     let _ = tx
@@ -280,29 +280,11 @@ impl ServiceTester {
     async fn check_endpoints_available(&self) -> Result<()> {
         let client = Client::new();
 
-        self.get_final_order(
-            &client,
-            &ViewFinalOrderRequest {
-                topic_id: "crisis_v2_season_4_1".to_string(),
-            },
-        )
-        .await?;
-        self.operators_1v1_matrix(
-            &client,
-            &Operators1v1MatrixRequest {
-                topic_id: "crisis_v2_season_4_1".to_string(),
-            },
-        )
-        .await?;
-        let data = self
-            .post_new_compare(
-                &client,
-                &NewCompareRequest {
-                    topic_id: "crisis_v2_season_4_1".to_string(),
-                    ballot_id: "".to_string(),
-                },
-            )
-            .await?;
+        let data = NewCompareRequest {
+            topic_id: "crisis_v2_season_4_1".to_string(),
+            ballot_id: "".to_string(),
+        };
+        let data = self.post_new_compare(&client, &data).await?;
         let (left, right, ballot_id) = match data {
             NewCompareResponse::Pairwise {
                 left,
@@ -315,14 +297,27 @@ impl ServiceTester {
                 return Err(eyre::eyre!("unexpected compare response type"));
             }
         };
-        self.post_save_score(
+
+        let data = SaveScoreRequest::Pairwise(PairwiseSaveScore {
+            topic_id: "crisis_v2_season_4_1".to_string(),
+            ballot_id,
+            winner: left,
+            loser: right,
+        });
+        self.post_save_score(&client, &data).await?;
+
+        self.get_final_order(
             &client,
-            SaveScoreRequest::Pairwise(PairwiseSaveScore {
+            &ViewFinalOrderRequest {
                 topic_id: "crisis_v2_season_4_1".to_string(),
-                ballot_id,
-                winner: left,
-                loser: right,
-            }),
+            },
+        )
+        .await?;
+        self.operators_1v1_matrix(
+            &client,
+            &Operators1v1MatrixRequest {
+                topic_id: "crisis_v2_season_4_1".to_string(),
+            },
         )
         .await?;
 
@@ -346,9 +341,13 @@ impl ServiceTester {
             .await
             .context("parsing view_final_order failed")?;
 
-        response
-            .data
-            .ok_or_else(|| eyre::eyre!("view_final_order response data is missing"))
+        match response.data {
+            Some(data) => Ok(data),
+            None => {
+                tracing::error!("view_final_order response: {:?}", response);
+                Err(eyre::eyre!("view_final_order response data is missing"))
+            }
+        }
     }
 
     async fn operators_1v1_matrix(
@@ -395,7 +394,7 @@ impl ServiceTester {
             .ok_or_else(|| eyre::eyre!("new_compare response data is missing"))
     }
 
-    async fn post_save_score(&self, client: &Client, data: SaveScoreRequest) -> Result<()> {
+    async fn post_save_score(&self, client: &Client, data: &SaveScoreRequest) -> Result<()> {
         let res = client
             .post(format!("{}/save_score", self.base_url))
             .json(&data)

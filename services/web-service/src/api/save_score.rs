@@ -72,6 +72,12 @@ pub async fn save_score(
         }
     };
 
+    let ip = addr.ip().to_string();
+    let user_agent = headers
+        .get("User-Agent")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown");
+
     match req {
         SaveScoreRequest::Pairwise(PairwiseSaveScore {
             topic_id,
@@ -82,12 +88,6 @@ pub async fn save_score(
             if winner == loser {
                 return Err(AppError::SameParticipant);
             }
-
-            let ip = addr.ip().to_string();
-            let user_agent = headers
-                .get("User-Agent")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("unknown");
 
             let ballot = Ballot::Pairwise(PairwiseBallot {
                 info: BallotInfo {

@@ -260,3 +260,14 @@ pub struct AuditTopicRequest {
     pub topic_id: String,
     pub audit_info: TopicAuditInfo,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GetCandidatePoolRequest {
+    pub topic_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GetCandidatePoolResponse {
+    pub topic_id: String,
+    pub pool: Vec<i32>,
+}

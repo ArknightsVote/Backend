@@ -5,7 +5,9 @@ use dashmap::DashMap;
 use futures::TryStreamExt as _;
 use mongodb::{Collection, bson::doc};
 use parking_lot::RwLock;
-use share::models::database::{CreateTopicStatus, TopicAuditInfo, VotingTopic};
+use share::models::database::{
+    CandidatePoolPreset, CreateTopicStatus, TopicAuditInfo, VotingTopic,
+};
 use tokio::sync::RwLock as AsyncRwLock;
 
 use crate::error::AppError;
@@ -212,6 +214,19 @@ impl TopicService {
         }
 
         Ok(())
+    }
+
+    pub async fn get_candidate_pool(
+        &self,
+        topic_id: &str,
+    ) -> Result<Option<CandidatePoolPreset>, AppError> {
+        if let Some(cached_topic) = self.cache.get(topic_id) {
+            return Ok(Some(cached_topic.candidate_pool));
+        }
+
+        self.get_topic(topic_id)
+            .await
+            .map(|opt| opt.map(|topic| topic.candidate_pool))
     }
 
     pub async fn _refresh_cache(&self) -> Result<usize, AppError> {

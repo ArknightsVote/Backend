@@ -60,6 +60,7 @@ pub async fn new_compare(
             }));
         }
     };
+    let topic_id = topic.id;
 
     match topic.topic_type {
         VotingTopicType::Pairwise => {
@@ -72,12 +73,12 @@ pub async fn new_compare(
             let ballot_id = format!("{id}-{random_string}");
 
             let mut conn = state.redis.connection.clone();
-            let ballot_key = format!("ballot:{ballot_id}");
+            let ballot_key = format!("{topic_id}:ballot:{ballot_id}");
             let ballot_value = format!("{left},{right}");
             let _: () = conn.set_ex(&ballot_key, &ballot_value, 86400).await?; // 24 hours expiration
 
             let rsp = NewCompareResponse::Pairwise {
-                topic_id: topic.id.clone(),
+                topic_id,
                 ballot_id,
                 left,
                 right,

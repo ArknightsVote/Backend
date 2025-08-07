@@ -131,12 +131,24 @@ pub async fn view_final_order(
 
     let mut conn = state.redis.connection.clone();
 
-    let (operator_values, total_valid_ballots): (Vec<Option<String>>, i64) = state
+    let (operator_values, total_valid_ballots): (Vec<Option<String>>, i64) = match state
         .redis
         .final_order_script
+        .key(&req.topic_id)
         .arg(&operators_info.op_stats_all_fields)
         .invoke_async(&mut conn)
-        .await?;
+        .await
+    {
+        Ok(result) => result,
+        Err(err) => {
+            tracing::error!("Failed to execute Lua script for final order: {}", err);
+            return Ok(Json(ApiResponse {
+                status: 500,
+                data: None,
+                message: ApiMsg::InternalError,
+            }));
+        }
+    };
 
     tracing::debug!(
         "Final order data for topic {}: {:?}",
@@ -144,7 +156,7 @@ pub async fn view_final_order(
         operator_values
     );
 
-    let (win_counts, lose_counts) = parse_operator_counts(&operator_values, num_operators)?;
+    let (win_counts, lose_counts) = parse_operator_counts(&operator_values, num_operators);
 
     let mut results = build_operator_results(
         &operators_info.operator_ids,
@@ -182,10 +194,7 @@ pub async fn view_final_order(
     }))
 }
 
-fn parse_operator_counts(
-    values: &[Option<String>],
-    num_operators: usize,
-) -> Result<(Vec<i64>, Vec<i64>), AppError> {
+fn parse_operator_counts(values: &[Option<String>], num_operators: usize) -> (Vec<i64>, Vec<i64>) {
     let win_counts: Vec<i64> = values[..num_operators]
         .iter()
         .map(|v| v.as_ref().and_then(|s| s.parse().ok()).unwrap_or(0))
@@ -196,7 +205,7 @@ fn parse_operator_counts(
         .map(|v| v.as_ref().and_then(|s| s.parse().ok()).unwrap_or(0))
         .collect();
 
-    Ok((win_counts, lose_counts))
+    (win_counts, lose_counts)
 }
 
 fn build_operator_results(
@@ -244,7 +253,7 @@ mod tests {
             Some("5".to_string()),
             Some("15".to_string()),
         ];
-        let (wins, losses) = parse_operator_counts(&values, 2).unwrap();
+        let (wins, losses) = parse_operator_counts(&values, 2);
 
         assert_eq!(wins, vec![10, 20]);
         assert_eq!(losses, vec![5, 15]);

@@ -1,14 +1,14 @@
 pub const BALLOT_CODE_RANDOM_LENGTH: usize = 8;
 
 pub const LUA_SCRIPT_GET_FINAL_ORDER: &str = r#"
+local topic_id = KEYS[1]
 local fields = ARGV
 
--- 获取 op_stats 哈希表的所有字段值
-local stats = redis.call('HMGET', 'op_stats', unpack(fields))
+local stats_key = topic_id .. ':op_stats'
+local stats = redis.call('HMGET', stats_key, unpack(fields))
 
--- 获取 total_valid_ballots
-local total_ballots = redis.call('GET', 'total_valid_ballots')
+local valid_ballots_key = topic_id .. ':valid_ballots_count'
+local total_ballots = redis.call('GET', valid_ballots_key)
 
--- 返回两个值：stats 和 total_ballots
 return {stats, total_ballots}
 "#;

@@ -11,6 +11,7 @@ use crate::AppState;
 mod audit_topic;
 mod create_topic;
 mod get_all_active_topics_ids;
+mod get_candidate_pool;
 mod get_need_audit_topics;
 mod get_topic_info;
 mod new_compare;
@@ -22,6 +23,7 @@ mod view_final_order;
 use audit_topic::*;
 use create_topic::*;
 use get_all_active_topics_ids::*;
+use get_candidate_pool::*;
 use get_need_audit_topics::*;
 use get_topic_info::*;
 use new_compare::*;
@@ -73,6 +75,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/topics", get(get_all_active_topics_ids))
         .route("/topics/create", post(create_topic))
         .route("/topics/info", post(get_topic_info))
+        .route("/topics/candidate_pool", post(get_candidate_pool))
         .route("/topics/need_audit", get(get_need_audit_topics))
         .route("/topics/audit_topic", post(audit_topic))
         .route("/new_compare", post(new_compare))
