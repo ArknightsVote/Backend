@@ -3,7 +3,6 @@ use std::{collections::HashMap, sync::Arc};
 use axum::{Json, extract::State};
 use share::models::{
     api::{ApiMsg, ApiResponse, FinalOrderItem, ViewFinalOrderRequest, ViewFinalOrderResponse},
-    database::CandidatePoolPreset,
     excel::CharacterInfo,
 };
 
@@ -49,10 +48,9 @@ struct OperatorsInfo {
 }
 
 fn generate_operators_info(
-    pool_preset: &CandidatePoolPreset,
+    operator_ids: &[i32],
     character_infos: &[CharacterInfo],
 ) -> OperatorsInfo {
-    let operator_ids = pool_preset.generate_pool(character_infos);
     let num_operators = operator_ids.len();
     let reverse_operators_id_dict: HashMap<i32, String> = operator_ids
         .iter()
@@ -75,7 +73,7 @@ fn generate_operators_info(
     let op_stats_all_fields = [&win_fields[..], &lose_fields[..]].concat();
 
     OperatorsInfo {
-        operator_ids,
+        operator_ids: operator_ids.to_vec(),
         num_operators,
         reverse_operators_id_dict,
         op_stats_all_fields,
@@ -119,8 +117,21 @@ pub async fn view_final_order(
         }
     };
 
-    let operators_info =
-        generate_operators_info(&target_topic.candidate_pool, &state.character_infos);
+    let candidate_pool = match state
+        .topic_service
+        .get_candidate_pool(&target_topic.id, &state.character_infos)
+        .await
+    {
+        Some(pool) => pool,
+        None => {
+            return Ok(Json(ApiResponse {
+                status: 404,
+                data: None,
+                message: ApiMsg::TargetTopicNotFound,
+            }));
+        }
+    };
+    let operators_info = generate_operators_info(&candidate_pool, &state.character_infos);
     let num_operators = operators_info.num_operators;
 
     tracing::debug!(

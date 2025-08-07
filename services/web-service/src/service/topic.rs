@@ -5,8 +5,9 @@ use dashmap::DashMap;
 use futures::TryStreamExt as _;
 use mongodb::{Collection, bson::doc};
 use parking_lot::RwLock;
-use share::models::database::{
-    CandidatePoolPreset, CreateTopicStatus, TopicAuditInfo, VotingTopic,
+use share::models::{
+    database::{CreateTopicStatus, TopicAuditInfo, VotingTopic},
+    excel::CharacterInfo,
 };
 use tokio::sync::RwLock as AsyncRwLock;
 
@@ -15,6 +16,7 @@ use crate::error::AppError;
 #[derive(Debug, Clone)]
 pub struct CacheEntry {
     data: VotingTopic,
+    pool: Vec<i32>,
     last_accessed: Arc<RwLock<Instant>>,
 }
 
@@ -22,6 +24,7 @@ impl CacheEntry {
     fn new(data: VotingTopic) -> Self {
         Self {
             data,
+            pool: Vec::new(),
             last_accessed: Arc::new(RwLock::new(Instant::now())),
         }
     }
@@ -41,6 +44,21 @@ pub struct TopicCache {
 impl TopicCache {
     pub fn get(&self, topic_id: &str) -> Option<VotingTopic> {
         self.cache.get(topic_id).map(|entry| entry.access())
+    }
+
+    pub fn get_pool(&self, topic_id: &str) -> Option<Vec<i32>> {
+        self.cache.get(topic_id).map(|entry| entry.pool.clone())
+    }
+
+    pub fn cache_topic_pool(&self, topic_id: &str, pool: Vec<i32>) {
+        if let Some(mut entry) = self.cache.get_mut(topic_id) {
+            entry.pool = pool;
+        } else {
+            tracing::warn!(
+                "Attempted to cache pool for non-existent topic: {}",
+                topic_id
+            );
+        }
     }
 
     pub fn insert(&self, topic: &VotingTopic) -> bool {
@@ -169,6 +187,8 @@ impl TopicService {
             self.cache.insert(&topic);
             Ok(Some(topic))
         } else {
+            tracing::debug!("Topic not found in database: {}", topic_id);
+
             Ok(None)
         }
     }
@@ -219,14 +239,27 @@ impl TopicService {
     pub async fn get_candidate_pool(
         &self,
         topic_id: &str,
-    ) -> Result<Option<CandidatePoolPreset>, AppError> {
-        if let Some(cached_topic) = self.cache.get(topic_id) {
-            return Ok(Some(cached_topic.candidate_pool));
+        character_infos: &[CharacterInfo],
+    ) -> Option<Vec<i32>> {
+        if let Some(pool) = self.cache.get_pool(topic_id)
+            && !pool.is_empty()
+        {
+            return Some(pool);
         }
 
-        self.get_topic(topic_id)
-            .await
-            .map(|opt| opt.map(|topic| topic.candidate_pool))
+        match self.get_topic(topic_id).await {
+            Ok(Some(topic)) => {
+                let pool = topic.candidate_pool.generate_pool(character_infos);
+                if !pool.is_empty() {
+                    self.cache.cache_topic_pool(topic_id, pool.clone());
+                    Some(pool)
+                } else {
+                    None
+                }
+            }
+            Ok(None) => None,
+            Err(_) => None,
+        }
     }
 
     pub async fn _refresh_cache(&self) -> Result<usize, AppError> {
@@ -251,6 +284,15 @@ impl TopicService {
 
     async fn cache_updater(topic_collection: Collection<VotingTopic>, topic_cache: TopicCache) {
         const CACHE_UPDATE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+        Self::initial_warm_cache(&topic_collection, &topic_cache)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to warm up cache: {}", e);
+            })
+            .unwrap_or_else(|_| {
+                tracing::info!("Cache warmed up successfully.");
+            });
 
         loop {
             let start = std::time::Instant::now();
@@ -277,6 +319,28 @@ impl TopicService {
                 tokio::time::sleep(CACHE_UPDATE_INTERVAL - elapsed).await;
             }
         }
+    }
+
+    async fn initial_warm_cache(
+        topic_collection: &Collection<VotingTopic>,
+        cache: &TopicCache,
+    ) -> Result<(), AppError> {
+        tracing::info!("Warming up cache...");
+
+        let filter = doc! {};
+        let mut cursor = topic_collection.find(filter).await?;
+        let mut topics = Vec::new();
+
+        while let Some(topic) = cursor.try_next().await? {
+            topics.push(topic);
+        }
+
+        let updated_count = cache.insert_batch(&topics);
+        *cache.last_full_refresh.write() = Utc::now();
+
+        tracing::info!("Cache warmed up with {} topics", updated_count);
+
+        Ok(())
     }
 
     async fn incremental_cache_update(
@@ -323,7 +387,11 @@ impl TopicService {
 mod tests {
     use super::*;
     use mongodb::options::ClientOptions;
-    use share::models::database::{CandidatePoolPreset, CreateTopicStatus, VotingTopicType};
+    use share::models::{
+        candidate_pool_preset::CandidatePoolPreset,
+        database::{CreateTopicStatus, VotingTopicType},
+        excel::RarityRank,
+    };
     use tokio;
 
     #[tokio::test]
@@ -343,7 +411,9 @@ mod tests {
             title: "Test Title".to_string(),
             description: "This is a test topic.".to_string(),
             topic_type: VotingTopicType::Pairwise,
-            candidate_pool: CandidatePoolPreset::SixStarOperators,
+            candidate_pool: CandidatePoolPreset::ByRarity {
+                rarities: vec![RarityRank::Tier6],
+            },
             created_at: chrono::Utc::now(),
             updated_at: None,
             open_time: chrono::Utc::now(),

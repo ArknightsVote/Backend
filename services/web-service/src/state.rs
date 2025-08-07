@@ -18,5 +18,6 @@ pub struct AppState {
     pub snowflake: Snowflake,
     pub character_infos: Vec<CharacterInfo>,
     pub tera: Tera,
+
     pub topic_service: TopicService,
 }

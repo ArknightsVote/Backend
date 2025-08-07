@@ -24,15 +24,15 @@ pub async fn get_candidate_pool(
 ) -> Result<Json<ApiResponse<GetCandidatePoolResponse>>, AppError> {
     let pool = state
         .topic_service
-        .get_candidate_pool(&payload.topic_id)
-        .await?;
+        .get_candidate_pool(&payload.topic_id, &state.character_infos)
+        .await;
 
     match pool {
         Some(pool) => Ok(Json(ApiResponse {
             status: 0,
             data: Some(GetCandidatePoolResponse {
                 topic_id: payload.topic_id,
-                pool: pool.generate_pool(&state.character_infos),
+                pool,
             }),
             message: ApiMsg::OK,
         })),

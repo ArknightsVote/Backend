@@ -64,14 +64,10 @@ impl ServiceTester {
             None
         };
 
-        let init_data = self
-            .get_final_order(
-                &client,
-                &ViewFinalOrderRequest {
-                    topic_id: "crisis_v2_season_4_1".to_string(),
-                },
-            )
-            .await?;
+        let data = ViewFinalOrderRequest {
+            topic_id: "crisis_v2_season_4_1".to_string(),
+        };
+        let init_data = self.get_final_order(&client, &data).await?;
         let init_score: i64 = init_data.items.iter().map(|i| i.win + i.lose).sum();
 
         let semaphore = Arc::new(Semaphore::new(self.concurrency_limit));
@@ -219,16 +215,11 @@ impl ServiceTester {
             attempt += 1;
             let start = Instant::now();
 
-            let compare = match self
-                .post_new_compare(
-                    &client,
-                    &NewCompareRequest {
-                        topic_id: "crisis_v2_season_4_1".to_string(),
-                        ballot_id: "".to_string(),
-                    },
-                )
-                .await
-            {
+            let data = NewCompareRequest {
+                topic_id: "crisis_v2_season_4_1".to_string(),
+                ballot_id: "".to_string(),
+            };
+            let compare = match self.post_new_compare(&client, &data).await {
                 Ok(c) => c,
                 Err(e) => {
                     tracing::warn!("new compare failed: {e}");
@@ -248,6 +239,8 @@ impl ServiceTester {
                     continue;
                 }
             };
+            assert!(left != right, "left and right should not be the same");
+            assert!(left > 0 && right > 0, "left and right should be positive");
 
             let data = SaveScoreRequest::Pairwise(PairwiseSaveScore {
                 topic_id: "crisis_v2_season_4_1".to_string(),
@@ -389,9 +382,13 @@ impl ServiceTester {
             .await
             .context("parsing new_compare response failed")?;
 
-        response
-            .data
-            .ok_or_else(|| eyre::eyre!("new_compare response data is missing"))
+        match response.data {
+            Some(data) => Ok(data),
+            None => {
+                tracing::error!("new_compare response: {:?}", response);
+                Err(eyre::eyre!("new_compare response data is missing"))
+            }
+        }
     }
 
     async fn post_save_score(&self, client: &Client, data: &SaveScoreRequest) -> Result<()> {

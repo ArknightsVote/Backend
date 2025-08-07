@@ -80,41 +80,17 @@ impl WebService {
         let collection = mongodb.collection::<VotingTopic>("topics");
 
         for preset_topic in &self.config.vote.preset_vote_topic {
-            match collection.find_one(doc! { "id": &preset_topic.id }).await {
+            let filter = doc! { "id": &preset_topic.id };
+
+            match collection.find_one(filter).await {
                 Ok(Some(_)) => {
-                    match collection
-                        .replace_one(doc! { "id": &preset_topic.id }, preset_topic)
-                        .await
-                    {
-                        Ok(_) => {
-                            tracing::info!("updated preset voting topic: {}", preset_topic.id);
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "failed to update preset voting topic {}: {:?}",
-                                preset_topic.id,
-                                e
-                            );
-                        }
-                    }
+                    let query = doc! { "id": &preset_topic.id };
+                    collection.replace_one(query, preset_topic).await?;
+                    tracing::info!("updated preset voting topic: {}", preset_topic.id);
                 }
-                Ok(None) => {
-                    if let Err(e) = collection.insert_one(preset_topic).await {
-                        tracing::error!(
-                            "failed to insert preset voting topic {}: {:?}",
-                            preset_topic.id,
-                            e
-                        );
-                    } else {
-                        tracing::info!("inserted preset voting topic: {}", preset_topic.id);
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "failed to check preset voting topic {}: {:?}",
-                        preset_topic.id,
-                        e
-                    );
+                Ok(None) | Err(_) => {
+                    tracing::info!("inserting preset voting topic: {}", preset_topic.id);
+                    collection.insert_one(preset_topic).await?;
                 }
             }
         }
@@ -147,6 +123,7 @@ impl WebService {
         tracing::debug!("Tera templates loaded");
 
         let topic_service = TopicService::new(mongodb.clone());
+        tracing::debug!("TopicService initialized");
 
         let state = AppState {
             jetstream,
@@ -162,12 +139,15 @@ impl WebService {
 
             topic_service,
         };
+        tracing::debug!("AppState initialized");
 
         let sentry_layer = ServiceBuilder::new()
             .layer(NewSentryLayer::new_from_top())
             .layer(SentryHttpLayer::new().enable_transaction());
+        tracing::debug!("Sentry layer initialized");
 
         let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
+        tracing::debug!("Prometheus metrics layer initialized");
 
         let cors_layer = {
             let allow_methods = self
@@ -194,6 +174,7 @@ impl WebService {
                 }
             }
         };
+        tracing::debug!("CORS layer initialized");
 
         let app = Router::new()
             .route("/", get(page_handler))
@@ -210,6 +191,7 @@ impl WebService {
                 TimeoutLayer::new(Duration::from_secs(60)),
             ))
             .layer(prometheus_layer);
+        tracing::debug!("Router initialized");
 
         let bind_addr = self
             .config

@@ -61,12 +61,24 @@ pub async fn new_compare(
         }
     };
     let topic_id = topic.id;
+    let candidate_pool = match state
+        .topic_service
+        .get_candidate_pool(&topic_id, &state.character_infos)
+        .await
+    {
+        Some(pool) => pool,
+        None => {
+            return Ok(Json(ApiResponse {
+                status: 404,
+                data: None,
+                message: ApiMsg::TargetTopicNotFound,
+            }));
+        }
+    };
 
     match topic.topic_type {
         VotingTopicType::Pairwise => {
-            let target_candidate_pool = topic.candidate_pool.generate_pool(&state.character_infos);
-
-            let (left, right) = select_operators(&target_candidate_pool)?;
+            let (left, right) = select_operators(&candidate_pool)?;
 
             let id = state.snowflake.next_id()?;
             let random_string = generate_random_string(BALLOT_CODE_RANDOM_LENGTH);

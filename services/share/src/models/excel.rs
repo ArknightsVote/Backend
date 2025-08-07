@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub enum RarityRank {
     #[serde(rename = "TIER_1")]
     Tier1,
@@ -17,6 +17,20 @@ pub enum RarityRank {
     Tier6,
     #[serde(rename = "E_NUM")]
     ENum,
+}
+
+impl RarityRank {
+    pub fn to_numeric(&self) -> i32 {
+        match self {
+            RarityRank::Tier1 => 1,
+            RarityRank::Tier2 => 2,
+            RarityRank::Tier3 => 3,
+            RarityRank::Tier4 => 4,
+            RarityRank::Tier5 => 5,
+            RarityRank::Tier6 => 6,
+            RarityRank::ENum => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
@@ -50,4 +64,36 @@ pub struct CharacterInfo {
     pub rarity: RarityRank,
     pub profession: ProfessionCategory,
     pub sub_profession_id: String,
+}
+
+impl CharacterInfo {
+    pub fn matches_rarities(&self, rarities: &[RarityRank]) -> bool {
+        rarities.contains(&self.rarity)
+    }
+
+    pub fn matches_professions(&self, professions: &[ProfessionCategory]) -> bool {
+        professions.contains(&self.profession)
+    }
+
+    pub fn matches_sub_professions(&self, sub_professions: &[String]) -> bool {
+        sub_professions.contains(&self.sub_profession_id)
+    }
+
+    pub fn rarity_in_range(&self, min: Option<RarityRank>, max: Option<RarityRank>) -> bool {
+        let rarity_value = self.rarity.to_numeric();
+
+        if let Some(min_rarity) = min
+            && rarity_value < min_rarity.to_numeric()
+        {
+            return false;
+        }
+
+        if let Some(max_rarity) = max
+            && rarity_value > max_rarity.to_numeric()
+        {
+            return false;
+        }
+
+        true
+    }
 }

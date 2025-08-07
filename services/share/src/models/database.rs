@@ -5,12 +5,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::models::excel::ProfessionCategory;
+use crate::models::candidate_pool_preset::CandidatePoolPreset;
 
-use super::{
-    api::SaveScoreRequest,
-    excel::{CharacterInfo, RarityRank},
-};
+use super::api::SaveScoreRequest;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VotingTopicType {
@@ -37,69 +34,6 @@ impl VotingTopicType {
 
     pub fn supports_1v1_matrix(&self) -> bool {
         matches!(self, VotingTopicType::Pairwise)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub enum CandidatePoolPreset {
-    AllOperators,                                 // 所有干员
-    AllOperatorsByProfession(ProfessionCategory), // 所有干员按职业分类
-    AllOperatorsByRarity(RarityRank),             // 所有干员按稀有度分类
-    AllOperatorsBySubProfession(String),          // 所有干员按子职业分类
-
-    SixStarOperators,                                 // 六星干员
-    SixStarOperatorsByProfession(ProfessionCategory), // 六星干员按职业分类
-    SixStarOperatorsByRarity(RarityRank),             // 六星干员按稀有度分类
-    SixStarOperatorsBySubProfession(String),          // 六星干员按子职业分类
-
-    Custom(Vec<i32>), // 自定义候选池
-}
-
-impl CandidatePoolPreset {
-    pub fn generate_pool(&self, character_infos: &[CharacterInfo]) -> Vec<i32> {
-        match self {
-            CandidatePoolPreset::AllOperators => character_infos.iter().map(|op| op.id).collect(),
-            CandidatePoolPreset::AllOperatorsByProfession(profession) => character_infos
-                .iter()
-                .filter(|op| op.profession == *profession)
-                .map(|op| op.id)
-                .collect(),
-            CandidatePoolPreset::AllOperatorsByRarity(rarity) => character_infos
-                .iter()
-                .filter(|op| op.rarity == *rarity)
-                .map(|op| op.id)
-                .collect(),
-            CandidatePoolPreset::AllOperatorsBySubProfession(sub_profession) => character_infos
-                .iter()
-                .filter(|op| op.sub_profession_id == *sub_profession)
-                .map(|op| op.id)
-                .collect(),
-
-            CandidatePoolPreset::SixStarOperators => character_infos
-                .iter()
-                .filter(|op| op.rarity == RarityRank::Tier6)
-                .map(|op| op.id)
-                .collect(),
-            CandidatePoolPreset::SixStarOperatorsByProfession(profession) => character_infos
-                .iter()
-                .filter(|op| op.profession == *profession && op.rarity == RarityRank::Tier6)
-                .map(|op| op.id)
-                .collect(),
-            CandidatePoolPreset::SixStarOperatorsByRarity(rarity) => character_infos
-                .iter()
-                .filter(|op| op.rarity == *rarity && op.rarity == RarityRank::Tier6)
-                .map(|op| op.id)
-                .collect(),
-            CandidatePoolPreset::SixStarOperatorsBySubProfession(sub_profession) => character_infos
-                .iter()
-                .filter(|op| {
-                    op.sub_profession_id == *sub_profession && op.rarity == RarityRank::Tier6
-                })
-                .map(|op| op.id)
-                .collect(),
-
-            CandidatePoolPreset::Custom(ops) => ops.clone(),
-        }
     }
 }
 

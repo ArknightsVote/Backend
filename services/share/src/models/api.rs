@@ -4,9 +4,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::models::database::{TopicAuditInfo, VotingTopic};
+use crate::models::{
+    candidate_pool_preset::CandidatePoolPreset,
+    database::{TopicAuditInfo, VotingTopic},
+};
 
-use super::database::{CandidatePoolPreset, CreateTopicStatus, VotingTopicType};
+use super::database::{CreateTopicStatus, VotingTopicType};
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub enum ApiMsg {
@@ -14,6 +17,7 @@ pub enum ApiMsg {
     TopicCreateFailed,
     TargetTopicNotFound,
     TargetTopicNotActive,
+    TargetTopicCandidatePoolNotFound,
     RequestTopicTypeMismatch,
     CurTopicNotSupportFinalOrder,
     CurTopicNotSupport1v1Matrix,
@@ -30,6 +34,9 @@ impl fmt::Display for ApiMsg {
             ApiMsg::TopicCreateFailed => write!(f, "Failed to create topic"),
             ApiMsg::TargetTopicNotFound => write!(f, "Target topic not found"),
             ApiMsg::TargetTopicNotActive => write!(f, "Target topic is not active"),
+            ApiMsg::TargetTopicCandidatePoolNotFound => {
+                write!(f, "Target topic candidate pool not found")
+            }
             ApiMsg::RequestTopicTypeMismatch => {
                 write!(f, "Request topic type does not match topic type")
             }
