@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub enum RarityRank {
     #[serde(rename = "TIER_1")]
     Tier1,
@@ -18,7 +19,7 @@ pub enum RarityRank {
     ENum,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 pub enum ProfessionCategory {
     NONE = 0,
     WARRIOR = 1,
