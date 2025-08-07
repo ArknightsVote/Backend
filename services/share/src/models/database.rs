@@ -134,7 +134,7 @@ pub struct PairwiseBallot<'a> {
     pub lose: i32,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SetwiseBallot<'a> {
     pub info: BallotInfo<'a>,
     pub left_set: Vec<i32>,
@@ -143,7 +143,7 @@ pub struct SetwiseBallot<'a> {
     pub selected_right: Vec<i32>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupwiseBallot<'a> {
     pub info: BallotInfo<'a>,
     pub left_group: Vec<i32>,
@@ -151,7 +151,7 @@ pub struct GroupwiseBallot<'a> {
     pub selected_group: super::api::GroupwiseSelection,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PluralityBallot<'a> {
     pub info: BallotInfo<'a>,
     pub candidates: Vec<i32>,

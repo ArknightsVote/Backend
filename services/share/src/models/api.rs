@@ -111,7 +111,7 @@ pub enum NewCompareResponse {
     },
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GroupwiseSelection {
     Left,
     Right,

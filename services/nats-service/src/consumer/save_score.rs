@@ -86,22 +86,19 @@ struct PairwiseBallotItem<'a> {
     message: async_nats::jetstream::Message,
 }
 
-#[allow(dead_code)]
 struct SetwiseBallotItem<'a> {
     ballot: SetwiseBallot<'a>,
-    message: async_nats::jetstream::Message,
+    _message: async_nats::jetstream::Message,
 }
 
-#[allow(dead_code)]
 struct GroupwiseBallotItem<'a> {
     ballot: GroupwiseBallot<'a>,
-    message: async_nats::jetstream::Message,
+    _message: async_nats::jetstream::Message,
 }
 
-#[allow(dead_code)]
 struct PluralityBallotItem<'a> {
     ballot: PluralityBallot<'a>,
-    message: async_nats::jetstream::Message,
+    _message: async_nats::jetstream::Message,
 }
 
 struct BallotMessageGroup<'a> {
@@ -131,15 +128,24 @@ impl<'a> BallotMessageGroup<'a> {
                 None
             }
             Ok(Ballot::Setwise(ballot)) => {
-                self.setwise.push(SetwiseBallotItem { ballot, message });
+                self.setwise.push(SetwiseBallotItem {
+                    ballot,
+                    _message: message,
+                });
                 None
             }
             Ok(Ballot::Groupwise(ballot)) => {
-                self.groupwise.push(GroupwiseBallotItem { ballot, message });
+                self.groupwise.push(GroupwiseBallotItem {
+                    ballot,
+                    _message: message,
+                });
                 None
             }
             Ok(Ballot::Plurality(ballot)) => {
-                self.plurality.push(PluralityBallotItem { ballot, message });
+                self.plurality.push(PluralityBallotItem {
+                    ballot,
+                    _message: message,
+                });
                 None
             }
             Err(e) => {
@@ -213,7 +219,30 @@ async fn process_save_score_messages(
             continue;
         }
 
-        let (pairwise, _, _, _) = ballot_groups.take_all();
+        let (pairwise, setwise, groupwise, plurality) = ballot_groups.take_all();
+
+        if !setwise.is_empty() {
+            let result = process_setwise_ballot_batch(&setwise, conn, database, app_config).await;
+            if let Err(e) = result {
+                tracing::error!("failed to process setwise ballots: {}", e);
+            }
+        }
+
+        if !groupwise.is_empty() {
+            let result =
+                process_groupwise_ballot_batch(&groupwise, conn, database, app_config).await;
+            if let Err(e) = result {
+                tracing::error!("failed to process groupwise ballots: {}", e);
+            }
+        }
+
+        if !plurality.is_empty() {
+            let result =
+                process_plurality_ballot_batch(&plurality, conn, database, app_config).await;
+            if let Err(e) = result {
+                tracing::error!("failed to process plurality ballots: {}", e);
+            }
+        }
 
         match process_pairwise_ballot_batch(&pairwise, conn, database, app_config).await {
             Ok(result) => {
@@ -498,6 +527,132 @@ async fn batch_update_scores(
         .await?;
 
     Ok(())
+}
+
+async fn process_setwise_ballot_batch(
+    ballots: &[SetwiseBallotItem<'_>],
+    _conn: &mut redis::aio::MultiplexedConnection,
+    database: &AppDatabase,
+    _app_config: &AppConfig,
+) -> Result<BatchProcessResult, AppError> {
+    tracing::debug!("Processing setwise ballot batch, but this feature is not implemented yet.");
+
+    // only save the ballot to mongoDB for now
+    let mut grouped_ballots: HashMap<String, Vec<StoredBallot>> = HashMap::new();
+    for item in ballots.iter() {
+        let topic_id = item.ballot.info.topic_id.to_string();
+        let stored_ballot = StoredBallot {
+            ballot: Ballot::Setwise(item.ballot.clone()),
+            multiplier: 1, // Placeholder multiplier, adjust as needed
+        };
+
+        grouped_ballots
+            .entry(topic_id)
+            .or_default()
+            .push(stored_ballot);
+    }
+
+    for (topic_id, ballots) in grouped_ballots.into_iter() {
+        let ballot_collection = database
+            .mongo_database
+            .collection::<StoredBallot>(&format!("ballots_{}", topic_id));
+
+        ballot_collection.insert_many(&ballots).await?;
+    }
+
+    tracing::debug!(
+        "Processed {} setwise ballots, but no score updates were made.",
+        ballots.len()
+    );
+
+    Ok(BatchProcessResult {
+        success_count: ballots.len(),
+        failed_messages: Vec::new(), // No failed messages in this case
+    })
+}
+
+async fn process_groupwise_ballot_batch(
+    ballots: &[GroupwiseBallotItem<'_>],
+    _conn: &mut redis::aio::MultiplexedConnection,
+    database: &AppDatabase,
+    _app_config: &AppConfig,
+) -> Result<BatchProcessResult, AppError> {
+    tracing::debug!("Processing groupwise ballot batch, but this feature is not implemented yet.");
+
+    // only save the ballot to mongoDB for now
+    let mut grouped_ballots: HashMap<String, Vec<StoredBallot>> = HashMap::new();
+    for item in ballots.iter() {
+        let topic_id = item.ballot.info.topic_id.to_string();
+        let stored_ballot = StoredBallot {
+            ballot: Ballot::Groupwise(item.ballot.clone()),
+            multiplier: 1, // Placeholder multiplier, adjust as needed
+        };
+
+        grouped_ballots
+            .entry(topic_id)
+            .or_default()
+            .push(stored_ballot);
+    }
+
+    for (topic_id, ballots) in grouped_ballots.into_iter() {
+        let ballot_collection = database
+            .mongo_database
+            .collection::<StoredBallot>(&format!("ballots_{}", topic_id));
+
+        ballot_collection.insert_many(&ballots).await?;
+    }
+
+    tracing::debug!(
+        "Processed {} groupwise ballots, but no score updates were made.",
+        ballots.len()
+    );
+
+    Ok(BatchProcessResult {
+        success_count: ballots.len(),
+        failed_messages: Vec::new(), // No failed messages in this case
+    })
+}
+
+async fn process_plurality_ballot_batch(
+    ballots: &[PluralityBallotItem<'_>],
+    _conn: &mut redis::aio::MultiplexedConnection,
+    database: &AppDatabase,
+    _app_config: &AppConfig,
+) -> Result<BatchProcessResult, AppError> {
+    tracing::debug!("Processing plurality ballot batch, but this feature is not implemented yet.");
+
+    // only save the ballot to mongoDB for now
+    let mut grouped_ballots: HashMap<String, Vec<StoredBallot>> = HashMap::new();
+    for item in ballots.iter() {
+        let topic_id = item.ballot.info.topic_id.to_string();
+        let stored_ballot = StoredBallot {
+            ballot: Ballot::Plurality(item.ballot.clone()),
+            multiplier: 1, // Placeholder multiplier, adjust as needed
+        };
+
+        grouped_ballots
+            .entry(topic_id)
+            .or_default()
+            .push(stored_ballot);
+    }
+
+    for (topic_id, ballots) in grouped_ballots.into_iter() {
+        let ballot_collection = database
+            .mongo_database
+            .collection::<StoredBallot>(&format!("ballots_{}", topic_id));
+
+        ballot_collection.insert_many(&ballots).await?;
+    }
+
+    tracing::debug!(
+        "Processed {} plurality ballots, but no score updates were made.",
+        ballots.len()
+    );
+
+    Ok(BatchProcessResult {
+        success_count: ballots.len(),
+        failed_messages: Vec::new(), // No failed messages in this case
+    })
 }
 
 // 回退处理单个消息（当批量处理失败时使用）
