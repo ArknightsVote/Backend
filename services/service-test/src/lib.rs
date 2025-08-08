@@ -7,8 +7,8 @@ use hdrhistogram::Histogram;
 use reqwest::Client;
 use share::config::AppConfig;
 use share::models::api::{
-    ApiResponse, BallotCreateRequest, BallotCreateResponse, BallotSaveRequest, PairwiseSaveScore,
-    Results1v1MatrixRequest, Results1v1MatrixResponse, ResultsFinalOrderRequest,
+    ApiData, ApiResponse, BallotCreateRequest, BallotCreateResponse, BallotSaveRequest,
+    PairwiseSaveScore, Results1v1MatrixRequest, Results1v1MatrixResponse, ResultsFinalOrderRequest,
     ResultsFinalOrderResponse,
 };
 use std::collections::HashMap;
@@ -67,7 +67,7 @@ impl ServiceTester {
         let data = ResultsFinalOrderRequest {
             topic_id: "crisis_v2_season_4_1".to_string(),
         };
-        let init_data = self.get_final_order(&client, &data).await?;
+        let init_data = self.results_final_order(&client, &data).await?;
         let init_score: i64 = init_data.items.iter().map(|i| i.win + i.lose).sum();
 
         let semaphore = Arc::new(Semaphore::new(self.concurrency_limit));
@@ -163,7 +163,7 @@ impl ServiceTester {
         }
 
         let final_data = self
-            .get_final_order(
+            .results_final_order(
                 &client,
                 &ResultsFinalOrderRequest {
                     topic_id: "crisis_v2_season_4_1".to_string(),
@@ -219,7 +219,7 @@ impl ServiceTester {
                 topic_id: "crisis_v2_season_4_1".to_string(),
                 ballot_id: "".to_string(),
             };
-            let compare = match self.post_new_compare(&client, &data).await {
+            let compare = match self.ballot_create(&client, &data).await {
                 Ok(c) => c,
                 Err(e) => {
                     tracing::warn!("new compare failed: {e}");
@@ -249,7 +249,7 @@ impl ServiceTester {
                 loser: right,
             });
 
-            match self.post_save_score(&client, &data).await {
+            match self.ballot_save(&client, &data).await {
                 Ok(_) => {
                     let latency = start.elapsed().as_micros() as u64;
                     let _ = tx
@@ -277,7 +277,7 @@ impl ServiceTester {
             topic_id: "crisis_v2_season_4_1".to_string(),
             ballot_id: "".to_string(),
         };
-        let data = self.post_new_compare(&client, &data).await?;
+        let data = self.ballot_create(&client, &data).await?;
         let (left, right, ballot_id) = match data {
             BallotCreateResponse::Pairwise {
                 left,
@@ -297,16 +297,16 @@ impl ServiceTester {
             winner: left,
             loser: right,
         });
-        self.post_save_score(&client, &data).await?;
+        self.ballot_save(&client, &data).await?;
 
-        self.get_final_order(
+        self.results_final_order(
             &client,
             &ResultsFinalOrderRequest {
                 topic_id: "crisis_v2_season_4_1".to_string(),
             },
         )
         .await?;
-        self.operators_1v1_matrix(
+        self.results_1v1_matrix(
             &client,
             &Results1v1MatrixRequest {
                 topic_id: "crisis_v2_season_4_1".to_string(),
@@ -317,92 +317,87 @@ impl ServiceTester {
         Ok(())
     }
 
-    async fn get_final_order(
+    async fn results_final_order(
         &self,
         client: &Client,
         data: &ResultsFinalOrderRequest,
     ) -> Result<ResultsFinalOrderResponse> {
         let res = client
-            .post(format!("{}/view_final_order", self.base_url))
+            .post(format!("{}/results/final_order", self.base_url))
             .json(data)
             .send()
             .await
-            .context("get view_final_order failed")?;
+            .context("get results_final_order failed")?;
 
         let response = res
             .json::<ApiResponse<ResultsFinalOrderResponse>>()
             .await
-            .context("parsing view_final_order failed")?;
+            .context("parsing results_final_order failed")?;
 
         match response.data {
-            Some(data) => Ok(data),
-            None => {
-                tracing::error!("view_final_order response: {:?}", response);
-                Err(eyre::eyre!("view_final_order response data is missing"))
-            }
+            ApiData::Data(data) => Ok(data),
+            ApiData::Empty => Err(eyre::eyre!("results_final_order response data is missing")),
         }
     }
 
-    async fn operators_1v1_matrix(
+    async fn results_1v1_matrix(
         &self,
         client: &Client,
         data: &Results1v1MatrixRequest,
     ) -> Result<Results1v1MatrixResponse> {
         let res = client
-            .post(format!("{}/operators_1v1_matrix", self.base_url))
+            .post(format!("{}/results/1v1_matrix", self.base_url))
             .json(data)
             .send()
             .await
-            .context("get operators_1v1_matrix failed")?;
+            .context("get results_1v1_matrix failed")?;
 
         let response = res
             .json::<ApiResponse<Results1v1MatrixResponse>>()
             .await
-            .context("parsing operators_1v1_matrix failed")?;
+            .context("parsing results_1v1_matrix failed")?;
 
-        response
-            .data
-            .ok_or_else(|| eyre::eyre!("operators_1v1_matrix response data is missing"))
+        match response.data {
+            ApiData::Data(data) => Ok(data),
+            ApiData::Empty => Err(eyre::eyre!("results_1v1_matrix response data is missing")),
+        }
     }
 
-    async fn post_new_compare(
+    async fn ballot_create(
         &self,
         client: &Client,
         data: &BallotCreateRequest,
     ) -> Result<BallotCreateResponse> {
         let res = client
-            .post(format!("{}/new_compare", self.base_url))
+            .post(format!("{}/ballot/new", self.base_url))
             .json(data)
             .send()
             .await
-            .context("post new_compare failed")?;
+            .context("post ballot_create failed")?;
 
         let response = res
             .json::<ApiResponse<BallotCreateResponse>>()
             .await
-            .context("parsing new_compare response failed")?;
+            .context("parsing ballot_create response failed")?;
 
         match response.data {
-            Some(data) => Ok(data),
-            None => {
-                tracing::error!("new_compare response: {:?}", response);
-                Err(eyre::eyre!("new_compare response data is missing"))
-            }
+            ApiData::Data(data) => Ok(data),
+            ApiData::Empty => Err(eyre::eyre!("ballot_create response data is missing")),
         }
     }
 
-    async fn post_save_score(&self, client: &Client, data: &BallotSaveRequest) -> Result<()> {
+    async fn ballot_save(&self, client: &Client, data: &BallotSaveRequest) -> Result<()> {
         let res = client
-            .post(format!("{}/save_score", self.base_url))
+            .post(format!("{}/ballot/save", self.base_url))
             .json(&data)
             .send()
             .await
-            .context("post save_score failed")?;
+            .context("post ballot_save failed")?;
 
         if res.status().is_success() {
             Ok(())
         } else {
-            Err(eyre::eyre!("save score failed: status {}", res.status()))
+            Err(eyre::eyre!("ballot_save failed: status {}", res.status()))
         }
     }
 }

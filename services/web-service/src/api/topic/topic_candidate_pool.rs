@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{Json, extract::State};
 use share::models::api::{
-    ApiMsg, ApiResponse, CharacterPortrait, TopicCandidatePoolRequest, TopicCandidatePoolResponse,
+    ApiData, ApiMsg, ApiResponse, CharacterPortrait, TopicCandidatePoolRequest, TopicCandidatePoolResponse
 };
 
 use crate::{AppState, error::AppError};
@@ -40,7 +40,7 @@ pub async fn topic_candidate_pool(
 
             Ok(Json(ApiResponse {
                 status: 0,
-                data: Some(TopicCandidatePoolResponse {
+                data: ApiData::Data(TopicCandidatePoolResponse {
                     topic_id: payload.topic_id,
                     pool,
                 }),
@@ -49,7 +49,7 @@ pub async fn topic_candidate_pool(
         }
         None => Ok(Json(ApiResponse {
             status: 404,
-            data: None,
+            data: ApiData::Empty,
             message: ApiMsg::TargetTopicNotFound,
         })),
     }

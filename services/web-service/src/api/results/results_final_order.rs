@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use axum::{Json, extract::State};
 use share::models::{
     api::{
-        ApiMsg, ApiResponse, FinalOrderItem, ResultsFinalOrderRequest, ResultsFinalOrderResponse,
+        ApiData, ApiMsg, ApiResponse, FinalOrderItem, ResultsFinalOrderRequest, ResultsFinalOrderResponse
     },
     excel::CharacterInfo,
 };
@@ -105,7 +105,7 @@ pub async fn results_final_order(
             tracing::debug!("Topic {} does not support final order", req.topic_id);
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::CurTopicNotSupportFinalOrder,
             }));
         }
@@ -113,7 +113,7 @@ pub async fn results_final_order(
             tracing::debug!("Topic {} not found", req.topic_id);
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
@@ -128,7 +128,7 @@ pub async fn results_final_order(
         None => {
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
@@ -157,7 +157,7 @@ pub async fn results_final_order(
             tracing::error!("Failed to execute Lua script for final order: {}", err);
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::InternalError,
             }));
         }
@@ -202,7 +202,7 @@ pub async fn results_final_order(
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: Some(response),
+        data: ApiData::Data(response),
         message: ApiMsg::OK,
     }))
 }

@@ -1,6 +1,6 @@
 use axum::{Json, http::StatusCode};
 use redis::RedisError;
-use share::models::api::{ApiMsg, ApiResponse};
+use share::models::api::{ApiData, ApiMsg, ApiResponse};
 
 #[derive(thiserror::Error, Debug)]
 pub enum AppError {
@@ -35,7 +35,7 @@ impl axum::response::IntoResponse for AppError {
                 StatusCode::BAD_REQUEST,
                 ApiResponse::<()> {
                     status: 500,
-                    data: None,
+                    data: ApiData::Empty,
                     message: ApiMsg::BallotWinnerCannotBeLoser,
                 },
             ),
@@ -43,7 +43,7 @@ impl axum::response::IntoResponse for AppError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::<()> {
                     status: 500,
-                    data: None,
+                    data: ApiData::Empty,
                     message: ApiMsg::InternalError,
                 },
             ),

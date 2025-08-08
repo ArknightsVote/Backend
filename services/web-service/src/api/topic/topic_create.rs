@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{Json, extract::State};
 use chrono::Utc;
 use share::models::{
-    api::{ApiMsg, ApiResponse, TopicCreateRequest, TopicCreateResponse},
+    api::{ApiData, ApiMsg, ApiResponse, TopicCreateRequest, TopicCreateResponse},
     database::{CreateTopicStatus, VotingTopic},
 };
 use uuid::Uuid;
@@ -48,7 +48,7 @@ pub async fn topic_create(
     match state.topic_service.create_topic(&topic).await {
         Ok(_) => Ok(Json(ApiResponse {
             status: 0,
-            data: Some(TopicCreateResponse {
+            data: ApiData::Data(TopicCreateResponse {
                 id: topic.id,
                 is_active: topic.is_active,
                 status: topic.status,
@@ -59,7 +59,7 @@ pub async fn topic_create(
             tracing::error!("Failed to create topic: {}", e);
             Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TopicCreateFailed,
             }))
         }

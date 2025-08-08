@@ -2,7 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{Json, extract::State};
 use redis::AsyncCommands;
-use share::models::api::{ApiMsg, ApiResponse, Results1v1MatrixRequest, Results1v1MatrixResponse};
+use share::models::api::{
+    ApiData, ApiMsg, ApiResponse, Results1v1MatrixRequest, Results1v1MatrixResponse,
+};
 
 use crate::{AppState, error::AppError};
 
@@ -28,14 +30,14 @@ pub async fn results_1v1_matrix(
         Ok(_) => {
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::CurTopicNotSupport1v1Matrix,
             }));
         }
         Err(_) => {
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
@@ -47,7 +49,7 @@ pub async fn results_1v1_matrix(
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: Some(Results1v1MatrixResponse { data }),
+        data: ApiData::Data(Results1v1MatrixResponse { data }),
         message: ApiMsg::OK,
     }))
 }

@@ -4,7 +4,7 @@ use axum::{Json, extract::State};
 use rand::seq::IndexedRandom as _;
 use redis::AsyncCommands as _;
 use share::models::{
-    api::{ApiMsg, ApiResponse, BallotCreateRequest, BallotCreateResponse},
+    api::{ApiData, ApiMsg, ApiResponse, BallotCreateRequest, BallotCreateResponse},
     database::VotingTopicType,
 };
 
@@ -48,14 +48,14 @@ pub async fn ballot_create(
         Ok(_) => {
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotActive,
             }));
         }
         Err(_) => {
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
@@ -70,7 +70,7 @@ pub async fn ballot_create(
         None => {
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
@@ -103,13 +103,13 @@ pub async fn ballot_create(
 
             Ok(Json(ApiResponse {
                 status: 0,
-                data: Some(rsp),
+                data: ApiData::Data(rsp),
                 message: ApiMsg::OK,
             }))
         }
         _ => Ok(Json(ApiResponse {
             status: 1,
-            data: None,
+            data: ApiData::Empty,
             message: ApiMsg::UnsupportedTopicType,
         })),
     }

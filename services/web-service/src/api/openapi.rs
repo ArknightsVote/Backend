@@ -4,7 +4,7 @@ use share::models::api::{
     ApiMsg, AuditTopicsListResponse, BallotCreateRequest, BallotCreateResponse, BallotSaveRequest,
     BallotSaveResponse, Results1v1MatrixResponse, ResultsFinalOrderRequest,
     ResultsFinalOrderResponse, TopicCreateRequest, TopicCreateResponse, TopicInfoRequest,
-    TopicInfoResponse, TopicsListActiveResponse,
+    TopicInfoResponse, TopicListActiveResponse,
 };
 
 #[derive(OpenApi)]
@@ -12,6 +12,12 @@ use share::models::api::{
     info(
         title = "Ark Vote Backend",
         description = "Backend for the Ark Vote application"
+    ),
+    tags(
+        (name = "Audit", description = "Topic audit related endpoints"),
+        (name = "Ballot", description = "Voting ballot related endpoints"),
+        (name = "Results", description = "Voting results related endpoints"),
+        (name = "Topic", description = "Topic info related endpoints"),
     ),
     paths(
         crate::api::audit::audit_topic::audit_topic,
@@ -26,7 +32,7 @@ use share::models::api::{
         crate::api::topic::topic_list_active::topic_list_active,
     ),
     components(schemas(
-        TopicsListActiveResponse,
+        TopicListActiveResponse,
         TopicCreateRequest,
         TopicCreateResponse,
         TopicInfoRequest,

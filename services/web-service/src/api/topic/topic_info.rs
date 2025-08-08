@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{Json, extract::State};
 use mongodb::bson::doc;
-use share::models::api::{ApiMsg, ApiResponse, TopicInfoRequest, TopicInfoResponse};
+use share::models::api::{ApiData, ApiMsg, ApiResponse, TopicInfoRequest, TopicInfoResponse};
 
 use crate::{AppState, error::AppError};
 
@@ -26,7 +26,7 @@ pub async fn topic_info(
     match state.topic_service.get_topic(&req.topic_id).await {
         Ok(Some(topic)) => Ok(Json(ApiResponse {
             status: 0,
-            data: Some(TopicInfoResponse {
+            data: ApiData::Data(TopicInfoResponse {
                 id: topic.id,
                 name: topic.name,
                 title: topic.title,
@@ -39,12 +39,12 @@ pub async fn topic_info(
         })),
         Ok(None) => Ok(Json(ApiResponse {
             status: 404,
-            data: None,
+            data: ApiData::Empty,
             message: ApiMsg::TargetTopicNotFound,
         })),
         Err(_) => Ok(Json(ApiResponse {
             status: 500,
-            data: None,
+            data: ApiData::Empty,
             message: ApiMsg::InternalError,
         })),
     }

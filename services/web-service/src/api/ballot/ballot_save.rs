@@ -6,7 +6,7 @@ use axum::{
     http::HeaderMap,
 };
 use share::models::{
-    api::{ApiMsg, ApiResponse, BallotSaveRequest, BallotSaveResponse, PairwiseSaveScore},
+    api::{ApiData, ApiMsg, ApiResponse, BallotSaveRequest, BallotSaveResponse, PairwiseSaveScore},
     database::{Ballot, BallotInfo, PairwiseBallot},
 };
 
@@ -39,35 +39,35 @@ pub async fn ballot_save(
         Ok(Some(topic)) if !topic.topic_type.matches_request(&req) => {
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::RequestTopicTypeMismatch,
             }));
         }
         Ok(Some(topic)) if !topic.is_topic_active() => {
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotActive,
             }));
         }
         Ok(None) => {
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
         Ok(Some(_)) => {
             return Ok(Json(ApiResponse {
                 status: 500,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::InternalError,
             }));
         }
         Err(_) => {
             return Ok(Json(ApiResponse {
                 status: 404,
-                data: None,
+                data: ApiData::Empty,
                 message: ApiMsg::TargetTopicNotFound,
             }));
         }
@@ -111,7 +111,7 @@ pub async fn ballot_save(
 
             Ok(Json(ApiResponse {
                 status: 0,
-                data: None,
+                data: ApiData::Data(BallotSaveResponse { code: 0 }),
                 message: ApiMsg::OK,
             }))
         }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State};
-use share::models::api::{ApiMsg, ApiResponse, AuditTopicRequest};
+use share::models::api::{ApiData, ApiMsg, ApiResponse, AuditTopicRequest};
 
 use crate::{AppState, error::AppError};
 
@@ -21,7 +21,7 @@ use crate::{AppState, error::AppError};
 pub async fn audit_topic(
     State(state): State<Arc<AppState>>,
     Json(req): Json<AuditTopicRequest>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
+) -> Result<Json<ApiResponse<ApiData<String>>>, AppError> {
     let topic_id = req.topic_id;
     state
         .topic_service
@@ -30,7 +30,7 @@ pub async fn audit_topic(
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: None,
+        data: ApiData::Empty,
         message: ApiMsg::OK,
     }))
 }

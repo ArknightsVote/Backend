@@ -55,16 +55,23 @@ impl fmt::Display for ApiMsg {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum ApiData<T> {
+    Data(T),
+    Empty,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ApiResponse<T> {
     pub status: i32,
-    pub data: Option<T>,
+    pub data: ApiData<T>,
     pub message: ApiMsg,
 }
 
 impl Default for ApiResponse<()> {
     fn default() -> Self {
         Self {
-            data: None,
+            data: ApiData::Empty,
             message: ApiMsg::OK,
             status: 0,
         }
@@ -253,7 +260,7 @@ pub struct TopicInfoResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct TopicsListActiveResponse {
+pub struct TopicListActiveResponse {
     pub topic_ids: Vec<String>,
 }
 

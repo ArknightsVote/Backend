@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State};
-use share::models::api::{ApiMsg, ApiResponse, AuditTopicsListResponse};
+use share::models::api::{ApiData, ApiMsg, ApiResponse, AuditTopicsListResponse};
 
 use crate::{AppState, error::AppError};
 
@@ -24,7 +24,7 @@ pub async fn audit_topics_list(
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: Some(AuditTopicsListResponse {
+        data: ApiData::Data(AuditTopicsListResponse {
             topics: audit_topics,
         }),
         message: ApiMsg::OK,
