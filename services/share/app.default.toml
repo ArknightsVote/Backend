@@ -21,7 +21,7 @@ is_active = true
 
 [vote.preset_vote_topic.candidate_pool]
 type = "by_rarity"
-params = { rarities = ["TIER_6"] }
+params = { rarities = ["TIER_6"], include_not_obtainable = false }
 
 [vote.preset_vote_topic.status.Approved]
 auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"
@@ -43,7 +43,7 @@ is_active = true
 
 [vote.preset_vote_topic.candidate_pool]
 type = "by_rarity"
-params = { rarities = ["TIER_6"] }
+params = { rarities = ["TIER_6"], include_not_obtainable = false }
 
 [vote.preset_vote_topic.status.Approved]
 auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State};
-use share::models::api::{ApiMsg, ApiResponse, GetCandidatePoolRequest, GetCandidatePoolResponse};
+use share::models::api::{
+    ApiMsg, ApiResponse, CharacterPortrait, GetCandidatePoolRequest, GetCandidatePoolResponse,
+};
 
 use crate::{AppState, error::AppError};
 
@@ -22,20 +24,29 @@ pub async fn get_candidate_pool(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<GetCandidatePoolRequest>,
 ) -> Result<Json<ApiResponse<GetCandidatePoolResponse>>, AppError> {
-    let pool = state
+    let candidate_pool = state
         .topic_service
         .get_candidate_pool(&payload.topic_id, &state.character_infos)
         .await;
 
-    match pool {
-        Some(pool) => Ok(Json(ApiResponse {
-            status: 0,
-            data: Some(GetCandidatePoolResponse {
-                topic_id: payload.topic_id,
-                pool,
-            }),
-            message: ApiMsg::OK,
-        })),
+    match candidate_pool {
+        Some(candidate_pool) => {
+            let mut pool: Vec<CharacterPortrait> = candidate_pool
+                .into_iter()
+                .filter_map(|char_id| state.character_portraits.get(&char_id).cloned())
+                .collect();
+
+            pool.sort_unstable_by_key(|info| info.id);
+
+            Ok(Json(ApiResponse {
+                status: 0,
+                data: Some(GetCandidatePoolResponse {
+                    topic_id: payload.topic_id,
+                    pool,
+                }),
+                message: ApiMsg::OK,
+            }))
+        }
         None => Ok(Json(ApiResponse {
             status: 404,
             data: None,

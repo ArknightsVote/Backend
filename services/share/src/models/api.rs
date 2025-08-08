@@ -268,6 +268,25 @@ pub struct AuditTopicRequest {
     pub audit_info: TopicAuditInfo,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+pub struct CharacterPortrait {
+    pub id: i32,
+    pub name: String,
+    pub cn_name: String,
+    pub avatar: Vec<String>,
+}
+
+impl Default for CharacterPortrait {
+    fn default() -> Self {
+        Self {
+            id: -1,
+            name: "Unknown".to_string(),
+            cn_name: "未知".to_string(),
+            avatar: vec![],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct GetCandidatePoolRequest {
     pub topic_id: String,
@@ -276,5 +295,5 @@ pub struct GetCandidatePoolRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct GetCandidatePoolResponse {
     pub topic_id: String,
-    pub pool: Vec<i32>,
+    pub pool: Vec<CharacterPortrait>,
 }

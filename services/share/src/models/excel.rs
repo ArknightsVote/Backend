@@ -55,6 +55,7 @@ pub struct CharacterData {
     pub rarity: RarityRank,
     pub profession: ProfessionCategory,
     pub sub_profession_id: String,
+    pub is_not_obtainable: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,8 @@ pub struct CharacterInfo {
     pub rarity: RarityRank,
     pub profession: ProfessionCategory,
     pub sub_profession_id: String,
+
+    pub is_not_obtainable: bool,
 }
 
 impl CharacterInfo {
@@ -77,6 +80,10 @@ impl CharacterInfo {
 
     pub fn matches_sub_professions(&self, sub_professions: &[String]) -> bool {
         sub_professions.contains(&self.sub_profession_id)
+    }
+
+    pub fn is_not_obtainable(&self) -> bool {
+        self.is_not_obtainable
     }
 
     pub fn rarity_in_range(&self, min: Option<RarityRank>, max: Option<RarityRank>) -> bool {

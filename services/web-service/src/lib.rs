@@ -88,9 +88,14 @@ impl WebService {
                     collection.replace_one(query, preset_topic).await?;
                     tracing::info!("updated preset voting topic: {}", preset_topic.id);
                 }
-                Ok(None) | Err(_) => {
+                Ok(None) => {
                     tracing::info!("inserting preset voting topic: {}", preset_topic.id);
                     collection.insert_one(preset_topic).await?;
+                }
+                Err(_) => {
+                    // maybe data structure has changed, we force replace
+                    let query = doc! { "id": &preset_topic.id };
+                    collection.replace_one(query, preset_topic).await?;
                 }
             }
         }
@@ -115,9 +120,14 @@ impl WebService {
                     rarity: data.rarity,
                     profession: data.profession,
                     sub_profession_id: data.sub_profession_id,
+                    is_not_obtainable: data.is_not_obtainable,
                 })
             })
             .collect();
+        tracing::debug!("Character infos loaded: {}", character_infos.len());
+
+        let character_portraits = utils::fetch_portrait_image_url().await?;
+        tracing::debug!("Character portraits fetched");
 
         let tera = Tera::new("templates/**/*").context("failed to load Tera templates")?;
         tracing::debug!("Tera templates loaded");
@@ -135,6 +145,7 @@ impl WebService {
             _mongodb: mongodb,
             snowflake,
             character_infos,
+            character_portraits,
             tera,
 
             topic_service,

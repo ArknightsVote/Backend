@@ -37,7 +37,10 @@ pub enum CandidatePoolPreset {
     Custom { operator_ids: Vec<i32> },
 
     #[serde(rename = "by_rarity")]
-    ByRarity { rarities: Vec<RarityRank> },
+    ByRarity {
+        rarities: Vec<RarityRank>,
+        include_not_obtainable: bool,
+    },
 
     #[serde(rename = "by_profession")]
     ByProfession {
@@ -75,6 +78,7 @@ impl CandidatePoolPreset {
 
             Self::Custom { operator_ids } => {
                 let valid_ids: HashSet<i32> = character_infos.iter().map(|c| c.id).collect();
+
                 operator_ids
                     .iter()
                     .filter(|&id| valid_ids.contains(id))
@@ -82,9 +86,13 @@ impl CandidatePoolPreset {
                     .collect()
             }
 
-            Self::ByRarity { rarities } => character_infos
+            Self::ByRarity {
+                rarities,
+                include_not_obtainable,
+            } => character_infos
                 .iter()
                 .filter(|c| c.matches_rarities(rarities))
+                .filter(|c| *include_not_obtainable || !c.is_not_obtainable())
                 .map(|c| c.id)
                 .collect(),
 
@@ -211,6 +219,7 @@ mod tests {
                 rarity: RarityRank::Tier6,
                 profession: ProfessionCategory::WARRIOR,
                 sub_profession_id: "centurion".to_string(),
+                is_not_obtainable: false,
             },
             CharacterInfo {
                 id: 1002,
@@ -218,6 +227,7 @@ mod tests {
                 rarity: RarityRank::Tier6,
                 profession: ProfessionCategory::WARRIOR,
                 sub_profession_id: "sword".to_string(),
+                is_not_obtainable: false,
             },
             CharacterInfo {
                 id: 2001,
@@ -225,6 +235,7 @@ mod tests {
                 rarity: RarityRank::Tier6,
                 profession: ProfessionCategory::CASTER,
                 sub_profession_id: "aoedamage".to_string(),
+                is_not_obtainable: false,
             },
             CharacterInfo {
                 id: 3001,
@@ -232,6 +243,7 @@ mod tests {
                 rarity: RarityRank::Tier6,
                 profession: ProfessionCategory::PIONEER,
                 sub_profession_id: "pioneer".to_string(),
+                is_not_obtainable: false,
             },
         ]
     }
@@ -273,6 +285,7 @@ mod tests {
             presets: vec![
                 CandidatePoolPreset::ByRarity {
                     rarities: vec![RarityRank::Tier6],
+                    include_not_obtainable: false,
                 },
                 CandidatePoolPreset::Custom {
                     operator_ids: vec![3001],
@@ -286,6 +299,7 @@ mod tests {
             presets: vec![
                 CandidatePoolPreset::ByRarity {
                     rarities: vec![RarityRank::Tier6],
+                    include_not_obtainable: false,
                 },
                 CandidatePoolPreset::ByProfession {
                     professions: vec![ProfessionCategory::WARRIOR],

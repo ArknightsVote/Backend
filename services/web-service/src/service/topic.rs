@@ -413,6 +413,7 @@ mod tests {
             topic_type: VotingTopicType::Pairwise,
             candidate_pool: CandidatePoolPreset::ByRarity {
                 rarities: vec![RarityRank::Tier6],
+                include_not_obtainable: false,
             },
             created_at: chrono::Utc::now(),
             updated_at: None,

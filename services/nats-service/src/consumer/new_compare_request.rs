@@ -121,7 +121,7 @@ async fn process_new_compare_requests(
             .await?;
 
         if count % 1000 == 0 || processed_count > 0 {
-            tracing::debug!("processed {} save score messages", count);
+            tracing::debug!("processed {} new compare request messages", count);
         }
 
         batch_messages.clear();

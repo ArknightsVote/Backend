@@ -24,6 +24,8 @@ pub enum AppError {
     MongoDb(#[from] mongodb::error::Error),
     #[error("missing character table json file")]
     MissingCharacterTableJson,
+    #[error("reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
 }
 
 impl axum::response::IntoResponse for AppError {
