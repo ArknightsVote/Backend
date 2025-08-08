@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use futures::StreamExt as _;
-use share::{config::AppConfig, models::api::NewCompareRequest};
+use share::{config::AppConfig, models::api::BallotCreateRequest};
 
 use crate::{
     AppDatabase,
@@ -83,7 +83,7 @@ async fn process_new_compare_requests(
         while let Some(message) = messages.next().await {
             match message {
                 Ok(msg) => {
-                    let data: NewCompareRequest = match serde_json::from_slice(&msg.payload) {
+                    let data: BallotCreateRequest = match serde_json::from_slice(&msg.payload) {
                         Ok(data) => data,
                         Err(e) => {
                             tracing::error!(

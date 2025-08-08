@@ -4,7 +4,7 @@ use axum::{Json, extract::State};
 use rand::seq::IndexedRandom as _;
 use redis::AsyncCommands as _;
 use share::models::{
-    api::{ApiMsg, ApiResponse, NewCompareRequest, NewCompareResponse},
+    api::{ApiMsg, ApiResponse, BallotCreateRequest, BallotCreateResponse},
     database::VotingTopicType,
 };
 
@@ -28,21 +28,21 @@ fn select_operators(operator_ids: &[i32]) -> Result<(i32, i32), AppError> {
 
 #[utoipa::path(
     post,
-    path = "/new_compare",
-    request_body = NewCompareRequest,
+    path = "/ballot/new",
+    request_body = BallotCreateRequest,
     responses(
-        (status = 200, description = "New comparison created", body = ApiResponse<NewCompareResponse>),
-        (status = 404, description = "Topic not found or not active", body = ApiResponse<String>),
+        (status = 200, description = "Create a new ballot", body = ApiResponse<BallotCreateResponse>),
+        (status = 404, description = "Topic not found or inactive", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Comparison",
-    operation_id = "newCompare"
+    tag = "Ballot",
+    operation_id = "ballotCreate"
 )]
 #[axum::debug_handler]
-pub async fn new_compare(
+pub async fn ballot_create(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<NewCompareRequest>,
-) -> Result<Json<ApiResponse<NewCompareResponse>>, AppError> {
+    Json(req): Json<BallotCreateRequest>,
+) -> Result<Json<ApiResponse<BallotCreateResponse>>, AppError> {
     let topic = match state.topic_service.get_topic(&req.topic_id).await {
         Ok(Some(topic)) if topic.is_topic_active() => topic,
         Ok(_) => {
@@ -89,7 +89,7 @@ pub async fn new_compare(
             let ballot_value = format!("{left},{right}");
             let _: () = conn.set_ex(&ballot_key, &ballot_value, 86400).await?; // 24 hours expiration
 
-            let rsp = NewCompareResponse::Pairwise {
+            let rsp = BallotCreateResponse::Pairwise {
                 topic_id,
                 ballot_id,
                 left,

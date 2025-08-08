@@ -7,9 +7,9 @@ use hdrhistogram::Histogram;
 use reqwest::Client;
 use share::config::AppConfig;
 use share::models::api::{
-    ApiResponse, NewCompareRequest, NewCompareResponse, Operators1v1MatrixRequest,
-    Operators1v1MatrixResponse, PairwiseSaveScore, SaveScoreRequest, ViewFinalOrderRequest,
-    ViewFinalOrderResponse,
+    ApiResponse, BallotCreateRequest, BallotCreateResponse, BallotSaveRequest, PairwiseSaveScore,
+    Results1v1MatrixRequest, Results1v1MatrixResponse, ResultsFinalOrderRequest,
+    ResultsFinalOrderResponse,
 };
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -64,7 +64,7 @@ impl ServiceTester {
             None
         };
 
-        let data = ViewFinalOrderRequest {
+        let data = ResultsFinalOrderRequest {
             topic_id: "crisis_v2_season_4_1".to_string(),
         };
         let init_data = self.get_final_order(&client, &data).await?;
@@ -165,7 +165,7 @@ impl ServiceTester {
         let final_data = self
             .get_final_order(
                 &client,
-                &ViewFinalOrderRequest {
+                &ResultsFinalOrderRequest {
                     topic_id: "crisis_v2_season_4_1".to_string(),
                 },
             )
@@ -215,7 +215,7 @@ impl ServiceTester {
             attempt += 1;
             let start = Instant::now();
 
-            let data = NewCompareRequest {
+            let data = BallotCreateRequest {
                 topic_id: "crisis_v2_season_4_1".to_string(),
                 ballot_id: "".to_string(),
             };
@@ -228,7 +228,7 @@ impl ServiceTester {
             };
 
             let (left, right, ballot_id) = match compare {
-                NewCompareResponse::Pairwise {
+                BallotCreateResponse::Pairwise {
                     left,
                     right,
                     ballot_id,
@@ -242,7 +242,7 @@ impl ServiceTester {
             assert!(left != right, "left and right should not be the same");
             assert!(left > 0 && right > 0, "left and right should be positive");
 
-            let data = SaveScoreRequest::Pairwise(PairwiseSaveScore {
+            let data = BallotSaveRequest::Pairwise(PairwiseSaveScore {
                 topic_id: "crisis_v2_season_4_1".to_string(),
                 ballot_id,
                 winner: left,
@@ -273,13 +273,13 @@ impl ServiceTester {
     async fn check_endpoints_available(&self) -> Result<()> {
         let client = Client::new();
 
-        let data = NewCompareRequest {
+        let data = BallotCreateRequest {
             topic_id: "crisis_v2_season_4_1".to_string(),
             ballot_id: "".to_string(),
         };
         let data = self.post_new_compare(&client, &data).await?;
         let (left, right, ballot_id) = match data {
-            NewCompareResponse::Pairwise {
+            BallotCreateResponse::Pairwise {
                 left,
                 right,
                 ballot_id,
@@ -291,7 +291,7 @@ impl ServiceTester {
             }
         };
 
-        let data = SaveScoreRequest::Pairwise(PairwiseSaveScore {
+        let data = BallotSaveRequest::Pairwise(PairwiseSaveScore {
             topic_id: "crisis_v2_season_4_1".to_string(),
             ballot_id,
             winner: left,
@@ -301,14 +301,14 @@ impl ServiceTester {
 
         self.get_final_order(
             &client,
-            &ViewFinalOrderRequest {
+            &ResultsFinalOrderRequest {
                 topic_id: "crisis_v2_season_4_1".to_string(),
             },
         )
         .await?;
         self.operators_1v1_matrix(
             &client,
-            &Operators1v1MatrixRequest {
+            &Results1v1MatrixRequest {
                 topic_id: "crisis_v2_season_4_1".to_string(),
             },
         )
@@ -320,8 +320,8 @@ impl ServiceTester {
     async fn get_final_order(
         &self,
         client: &Client,
-        data: &ViewFinalOrderRequest,
-    ) -> Result<ViewFinalOrderResponse> {
+        data: &ResultsFinalOrderRequest,
+    ) -> Result<ResultsFinalOrderResponse> {
         let res = client
             .post(format!("{}/view_final_order", self.base_url))
             .json(data)
@@ -330,7 +330,7 @@ impl ServiceTester {
             .context("get view_final_order failed")?;
 
         let response = res
-            .json::<ApiResponse<ViewFinalOrderResponse>>()
+            .json::<ApiResponse<ResultsFinalOrderResponse>>()
             .await
             .context("parsing view_final_order failed")?;
 
@@ -346,8 +346,8 @@ impl ServiceTester {
     async fn operators_1v1_matrix(
         &self,
         client: &Client,
-        data: &Operators1v1MatrixRequest,
-    ) -> Result<Operators1v1MatrixResponse> {
+        data: &Results1v1MatrixRequest,
+    ) -> Result<Results1v1MatrixResponse> {
         let res = client
             .post(format!("{}/operators_1v1_matrix", self.base_url))
             .json(data)
@@ -356,7 +356,7 @@ impl ServiceTester {
             .context("get operators_1v1_matrix failed")?;
 
         let response = res
-            .json::<ApiResponse<Operators1v1MatrixResponse>>()
+            .json::<ApiResponse<Results1v1MatrixResponse>>()
             .await
             .context("parsing operators_1v1_matrix failed")?;
 
@@ -368,8 +368,8 @@ impl ServiceTester {
     async fn post_new_compare(
         &self,
         client: &Client,
-        data: &NewCompareRequest,
-    ) -> Result<NewCompareResponse> {
+        data: &BallotCreateRequest,
+    ) -> Result<BallotCreateResponse> {
         let res = client
             .post(format!("{}/new_compare", self.base_url))
             .json(data)
@@ -378,7 +378,7 @@ impl ServiceTester {
             .context("post new_compare failed")?;
 
         let response = res
-            .json::<ApiResponse<NewCompareResponse>>()
+            .json::<ApiResponse<BallotCreateResponse>>()
             .await
             .context("parsing new_compare response failed")?;
 
@@ -391,7 +391,7 @@ impl ServiceTester {
         }
     }
 
-    async fn post_save_score(&self, client: &Client, data: &SaveScoreRequest) -> Result<()> {
+    async fn post_save_score(&self, client: &Client, data: &BallotSaveRequest) -> Result<()> {
         let res = client
             .post(format!("{}/save_score", self.base_url))
             .json(&data)

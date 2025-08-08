@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{Json, extract::State};
 use chrono::Utc;
 use share::models::{
-    api::{ApiMsg, ApiResponse, CreateTopicRequest, CreateTopicResponse},
+    api::{ApiMsg, ApiResponse, TopicCreateRequest, TopicCreateResponse},
     database::{CreateTopicStatus, VotingTopic},
 };
 use uuid::Uuid;
@@ -12,20 +12,20 @@ use crate::{AppState, error::AppError};
 
 #[utoipa::path(
     post,
-    path = "/topics/create",
-    request_body = CreateTopicRequest,
+    path = "/topic/create",
+    request_body = TopicCreateRequest,
     responses(
-        (status = 200, description = "Create a new topic", body = ApiResponse<CreateTopicResponse>),
+        (status = 200, description = "Create a new topic", body = ApiResponse<TopicCreateResponse>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Topics",
-    operation_id = "createTopic"
+    tag = "Topic",
+    operation_id = "topicCreate"
 )]
 #[axum::debug_handler]
-pub async fn create_topic(
+pub async fn topic_create(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<CreateTopicRequest>,
-) -> Result<Json<ApiResponse<CreateTopicResponse>>, AppError> {
+    Json(req): Json<TopicCreateRequest>,
+) -> Result<Json<ApiResponse<TopicCreateResponse>>, AppError> {
     let topic = VotingTopic {
         id: if req.id.is_empty() {
             Uuid::new_v4().to_string()
@@ -48,7 +48,7 @@ pub async fn create_topic(
     match state.topic_service.create_topic(&topic).await {
         Ok(_) => Ok(Json(ApiResponse {
             status: 0,
-            data: Some(CreateTopicResponse {
+            data: Some(TopicCreateResponse {
                 id: topic.id,
                 is_active: topic.is_active,
                 status: topic.status,

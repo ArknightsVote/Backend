@@ -107,3 +107,4 @@ qps_limit = 500
 [tracing]
 level = "debug"
 log_file_directory = "logs"
+directives = ["async_nats=info", "globset=info"]

@@ -85,14 +85,14 @@ impl axum::response::IntoResponse for ApiResponse<()> {
 }
 
 #[derive(Default, Debug, Deserialize, Serialize, ToSchema)]
-pub struct NewCompareRequest {
+pub struct BallotCreateRequest {
     pub topic_id: String,
     pub ballot_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[serde(tag = "topic_type", rename_all = "snake_case")]
-pub enum NewCompareResponse {
+pub enum BallotCreateResponse {
     Pairwise {
         topic_id: String,
         ballot_id: String,
@@ -161,26 +161,26 @@ pub struct PluralitySaveScore {
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[serde(tag = "topic_type", rename_all = "snake_case")]
-pub enum SaveScoreRequest {
+pub enum BallotSaveRequest {
     Pairwise(PairwiseSaveScore),
     Setwise(SetwiseSaveScore),
     Groupwise(GroupwiseSaveScore),
     Plurality(PluralitySaveScore),
 }
 
-impl SaveScoreRequest {
+impl BallotSaveRequest {
     pub fn topic_id(&self) -> &String {
         match self {
-            SaveScoreRequest::Pairwise(data) => &data.topic_id,
-            SaveScoreRequest::Setwise(data) => &data.topic_id,
-            SaveScoreRequest::Groupwise(data) => &data.topic_id,
-            SaveScoreRequest::Plurality(data) => &data.topic_id,
+            BallotSaveRequest::Pairwise(data) => &data.topic_id,
+            BallotSaveRequest::Setwise(data) => &data.topic_id,
+            BallotSaveRequest::Groupwise(data) => &data.topic_id,
+            BallotSaveRequest::Plurality(data) => &data.topic_id,
         }
     }
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct SaveScoreResponse {
+pub struct BallotSaveResponse {
     pub code: i8,
 }
 
@@ -195,29 +195,29 @@ pub struct FinalOrderItem {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct ViewFinalOrderRequest {
+pub struct ResultsFinalOrderRequest {
     pub topic_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct ViewFinalOrderResponse {
+pub struct ResultsFinalOrderResponse {
     pub topic_id: String,
     pub items: Vec<FinalOrderItem>,
     pub count: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct Operators1v1MatrixRequest {
+pub struct Results1v1MatrixRequest {
     pub topic_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct Operators1v1MatrixResponse {
+pub struct Results1v1MatrixResponse {
     pub data: HashMap<String, i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateTopicRequest {
+pub struct TopicCreateRequest {
     pub id: String,
     pub name: String,
     pub title: String,
@@ -230,19 +230,19 @@ pub struct CreateTopicRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateTopicResponse {
+pub struct TopicCreateResponse {
     pub id: String,
     pub is_active: bool,
     pub status: CreateTopicStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct GetTopicInfoRequest {
+pub struct TopicInfoRequest {
     pub topic_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct GetTopicInfoResponse {
+pub struct TopicInfoResponse {
     pub id: String,
     pub name: String,
     pub title: String,
@@ -253,12 +253,12 @@ pub struct GetTopicInfoResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct GetAllTopicsIdsResponse {
+pub struct TopicsListActiveResponse {
     pub topic_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct GetAuditTopicsResponse {
+pub struct AuditTopicsListResponse {
     pub topics: Vec<VotingTopic>,
 }
 
@@ -288,12 +288,12 @@ impl Default for CharacterPortrait {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct GetCandidatePoolRequest {
+pub struct TopicCandidatePoolRequest {
     pub topic_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct GetCandidatePoolResponse {
+pub struct TopicCandidatePoolResponse {
     pub topic_id: String,
     pub pool: Vec<CharacterPortrait>,
 }

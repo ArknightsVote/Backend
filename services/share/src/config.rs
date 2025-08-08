@@ -62,6 +62,7 @@ pub struct SentryConfig {
 pub struct TracingConfig {
     pub level: String,
     pub log_file_directory: String,
+    pub directives: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

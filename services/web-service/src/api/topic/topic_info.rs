@@ -2,31 +2,31 @@ use std::sync::Arc;
 
 use axum::{Json, extract::State};
 use mongodb::bson::doc;
-use share::models::api::{ApiMsg, ApiResponse, GetTopicInfoRequest, GetTopicInfoResponse};
+use share::models::api::{ApiMsg, ApiResponse, TopicInfoRequest, TopicInfoResponse};
 
 use crate::{AppState, error::AppError};
 
 #[utoipa::path(
     post,
-    path = "/topics/info",
-    request_body = GetTopicInfoRequest,
+    path = "/topic/info",
+    request_body = TopicInfoRequest,
     responses(
-        (status = 200, description = "Get topic information", body = ApiResponse<GetTopicInfoResponse>),
+        (status = 200, description = "Get topic information", body = ApiResponse<TopicInfoResponse>),
         (status = 404, description = "Topic not found", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Topics",
-    operation_id = "getTopicInfo"
+    tag = "Topic",
+    operation_id = "topicInfo"
 )]
 #[axum::debug_handler]
-pub async fn get_topic_info(
+pub async fn topic_info(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<GetTopicInfoRequest>,
-) -> Result<Json<ApiResponse<GetTopicInfoResponse>>, AppError> {
+    Json(req): Json<TopicInfoRequest>,
+) -> Result<Json<ApiResponse<TopicInfoResponse>>, AppError> {
     match state.topic_service.get_topic(&req.topic_id).await {
         Ok(Some(topic)) => Ok(Json(ApiResponse {
             status: 0,
-            data: Some(GetTopicInfoResponse {
+            data: Some(TopicInfoResponse {
                 id: topic.id,
                 name: topic.name,
                 title: topic.title,

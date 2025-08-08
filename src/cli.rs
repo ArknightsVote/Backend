@@ -62,11 +62,7 @@ impl Cli {
             .map(|cmd| format!("{cmd}"))
             .unwrap_or_else(|| "ark_vote".to_string());
 
-        let guard = init_tracing_subscriber(
-            &config.tracing.level,
-            &config.tracing.log_file_directory,
-            &service_name,
-        );
+        let guard = init_tracing_subscriber(&config.tracing, &service_name);
         std::mem::forget(guard);
 
         tracing::info!(
@@ -77,9 +73,10 @@ impl Cli {
 
         let version = render_testament!(TESTAMENT).leak();
 
-        if !config.sentry.dsn.is_empty() {
+        let sentry_config = &config.sentry;
+        if !sentry_config.dsn.is_empty() {
             tracing::info!("sentry DSN is set, initializing Sentry");
-            let dsn = config.sentry.dsn.clone();
+            let dsn = sentry_config.dsn.clone();
             let _guard = sentry::init((
                 dsn,
                 sentry::ClientOptions {

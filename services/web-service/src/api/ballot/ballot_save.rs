@@ -6,7 +6,7 @@ use axum::{
     http::HeaderMap,
 };
 use share::models::{
-    api::{ApiMsg, ApiResponse, PairwiseSaveScore, SaveScoreRequest, SaveScoreResponse},
+    api::{ApiMsg, ApiResponse, BallotSaveRequest, BallotSaveResponse, PairwiseSaveScore},
     database::{Ballot, BallotInfo, PairwiseBallot},
 };
 
@@ -14,23 +14,24 @@ use crate::{AppState, api::utils::publish_and_ack, error::AppError};
 
 #[utoipa::path(
     post,
-    path = "/save_score",
-    tag = "Voting",
-    request_body = SaveScoreRequest,
+    path = "/ballot/save",
+    request_body = BallotSaveRequest,
     responses(
-        (status = 200, description = "Score saved successfully", body = ApiResponse<SaveScoreResponse>),
-        (status = 400, description = "Bad Request", body = ApiMsg),
-        (status = 404, description = "Topic not found", body = ApiMsg),
-        (status = 500, description = "Internal Server Error", body = ApiMsg)
-    )
+        (status = 200, description = "Save ballot successfully", body = ApiResponse<BallotSaveResponse>),
+        (status = 400, description = "Invalid request", body = ApiResponse<String>),
+        (status = 404, description = "Topic not found", body = ApiResponse<String>),
+        (status = 500, description = "Internal server error", body = ApiResponse<String>)
+    ),
+    tag = "Ballot",
+    operation_id = "ballotSave"
 )]
 #[axum::debug_handler]
-pub async fn save_score(
+pub async fn ballot_save(
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
-    Json(req): Json<SaveScoreRequest>,
-) -> Result<Json<ApiResponse<SaveScoreResponse>>, AppError> {
+    Json(req): Json<BallotSaveRequest>,
+) -> Result<Json<ApiResponse<BallotSaveResponse>>, AppError> {
     let _target_topic = match state.topic_service.get_topic(req.topic_id()).await {
         Ok(Some(topic)) if topic.is_topic_active() && topic.topic_type.matches_request(&req) => {
             topic
@@ -79,7 +80,7 @@ pub async fn save_score(
         .unwrap_or("unknown");
 
     match req {
-        SaveScoreRequest::Pairwise(PairwiseSaveScore {
+        BallotSaveRequest::Pairwise(PairwiseSaveScore {
             topic_id,
             ballot_id,
             winner,

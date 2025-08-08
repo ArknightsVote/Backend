@@ -2,29 +2,27 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{Json, extract::State};
 use redis::AsyncCommands;
-use share::models::api::{
-    ApiMsg, ApiResponse, Operators1v1MatrixRequest, Operators1v1MatrixResponse,
-};
+use share::models::api::{ApiMsg, ApiResponse, Results1v1MatrixRequest, Results1v1MatrixResponse};
 
 use crate::{AppState, error::AppError};
 
 #[utoipa::path(
-    get,
-    path = "/operators_1v1_matrix",
+    post,
+    path = "/results/1v1_matrix",
+    request_body = Results1v1MatrixRequest,
     responses(
-        (status = 200, description = "Get operators 1v1 matrix", body = Operators1v1MatrixResponse),
+        (status = 200, description = "Get operators 1v1 matrix for a topic", body = ApiResponse<Results1v1MatrixResponse>),
         (status = 400, description = "Bad request", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    params(
-        ("topic_id" = String, description = "ID of the topic for which to get the 1v1 matrix")
-    )
+    tag = "Results",
+    operation_id = "results1v1Matrix"
 )]
 #[axum::debug_handler]
-pub async fn operators_1v1_matrix(
+pub async fn results_1v1_matrix(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<Operators1v1MatrixRequest>,
-) -> Result<Json<ApiResponse<Operators1v1MatrixResponse>>, AppError> {
+    Json(req): Json<Results1v1MatrixRequest>,
+) -> Result<Json<ApiResponse<Results1v1MatrixResponse>>, AppError> {
     let _target_topic = match state.topic_service.get_topic(&req.topic_id).await {
         Ok(Some(topic)) if topic.topic_type.supports_1v1_matrix() => topic,
         Ok(_) => {
@@ -49,7 +47,7 @@ pub async fn operators_1v1_matrix(
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: Some(Operators1v1MatrixResponse { data }),
+        data: Some(Results1v1MatrixResponse { data }),
         message: ApiMsg::OK,
     }))
 }

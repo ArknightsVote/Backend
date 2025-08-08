@@ -2,28 +2,28 @@ use std::sync::Arc;
 
 use axum::{Json, extract::State};
 use share::models::api::{
-    ApiMsg, ApiResponse, CharacterPortrait, GetCandidatePoolRequest, GetCandidatePoolResponse,
+    ApiMsg, ApiResponse, CharacterPortrait, TopicCandidatePoolRequest, TopicCandidatePoolResponse,
 };
 
 use crate::{AppState, error::AppError};
 
 #[utoipa::path(
     post,
-    path = "/topics/candidate_pool",
-    request_body = GetCandidatePoolRequest,
+    path = "/topic/candidate_pool",
+    request_body = TopicCandidatePoolRequest,
     responses(
-        (status = 200, description = "Get candidate pool", body = ApiResponse<GetCandidatePoolResponse>),
+        (status = 200, description = "Get candidate pool for a topic", body = ApiResponse<TopicCandidatePoolResponse>),
         (status = 404, description = "Topic not found", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Topics",
-    operation_id = "getCandidatePool"
+    tag = "Topic",
+    operation_id = "topicCandidatePool"
 )]
 #[axum::debug_handler]
-pub async fn get_candidate_pool(
+pub async fn topic_candidate_pool(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<GetCandidatePoolRequest>,
-) -> Result<Json<ApiResponse<GetCandidatePoolResponse>>, AppError> {
+    Json(payload): Json<TopicCandidatePoolRequest>,
+) -> Result<Json<ApiResponse<TopicCandidatePoolResponse>>, AppError> {
     let candidate_pool = state
         .topic_service
         .get_candidate_pool(&payload.topic_id, &state.character_infos)
@@ -40,7 +40,7 @@ pub async fn get_candidate_pool(
 
             Ok(Json(ApiResponse {
                 status: 0,
-                data: Some(GetCandidatePoolResponse {
+                data: Some(TopicCandidatePoolResponse {
                     topic_id: payload.topic_id,
                     pool,
                 }),

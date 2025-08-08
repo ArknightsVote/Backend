@@ -1,30 +1,30 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State};
-use share::models::api::{ApiMsg, ApiResponse, GetAuditTopicsResponse};
+use share::models::api::{ApiMsg, ApiResponse, AuditTopicsListResponse};
 
 use crate::{AppState, error::AppError};
 
 #[utoipa::path(
-    get,
-    path = "/topics/need_audit",
+    post,
+    path = "/audit/need_audit_topics",
     responses(
-        (status = 200, description = "Get topics that need audit", body = ApiResponse<GetAuditTopicsResponse>),
+        (status = 200, description = "List topics that need audit", body = ApiResponse<AuditTopicsListResponse>),
         (status = 404, description = "No topics found", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Topics",
-    operation_id = "getNeedAuditTopics"
+    tag = "Audit",
+    operation_id = "auditTopicsList"
 )]
 #[axum::debug_handler]
-pub async fn get_need_audit_topics(
+pub async fn audit_topics_list(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<ApiResponse<GetAuditTopicsResponse>>, AppError> {
+) -> Result<Json<ApiResponse<AuditTopicsListResponse>>, AppError> {
     let audit_topics = state.topic_service.get_need_audit_topics().await?;
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: Some(GetAuditTopicsResponse {
+        data: Some(AuditTopicsListResponse {
             topics: audit_topics,
         }),
         message: ApiMsg::OK,

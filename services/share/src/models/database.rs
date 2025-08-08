@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::models::candidate_pool_preset::CandidatePoolPreset;
 
-use super::api::SaveScoreRequest;
+use super::api::BallotSaveRequest;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum VotingTopicType {
@@ -18,13 +18,13 @@ pub enum VotingTopicType {
 }
 
 impl VotingTopicType {
-    pub fn matches_request(&self, req: &SaveScoreRequest) -> bool {
+    pub fn matches_request(&self, req: &BallotSaveRequest) -> bool {
         matches!(
             (self, req),
-            (VotingTopicType::Pairwise, SaveScoreRequest::Pairwise(_))
-                | (VotingTopicType::Setwise, SaveScoreRequest::Setwise(_))
-                | (VotingTopicType::Groupwise, SaveScoreRequest::Groupwise(_))
-                | (VotingTopicType::Plurality, SaveScoreRequest::Plurality(_))
+            (VotingTopicType::Pairwise, BallotSaveRequest::Pairwise(_))
+                | (VotingTopicType::Setwise, BallotSaveRequest::Setwise(_))
+                | (VotingTopicType::Groupwise, BallotSaveRequest::Groupwise(_))
+                | (VotingTopicType::Plurality, BallotSaveRequest::Plurality(_))
         )
     }
 

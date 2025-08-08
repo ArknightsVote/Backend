@@ -2,7 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{Json, extract::State};
 use share::models::{
-    api::{ApiMsg, ApiResponse, FinalOrderItem, ViewFinalOrderRequest, ViewFinalOrderResponse},
+    api::{
+        ApiMsg, ApiResponse, FinalOrderItem, ResultsFinalOrderRequest, ResultsFinalOrderResponse,
+    },
     excel::CharacterInfo,
 };
 
@@ -82,21 +84,21 @@ fn generate_operators_info(
 
 #[utoipa::path(
     post,
-    path = "/view_final_order",
-    request_body = ViewFinalOrderRequest,
+    path = "/results/final_order",
+    request_body = ResultsFinalOrderRequest,
     responses(
-        (status = 200, description = "Final order view", body = ApiResponse<ViewFinalOrderResponse>),
+        (status = 200, description = "Get final order for a topic", body = ApiResponse<ResultsFinalOrderResponse>),
         (status = 400, description = "Bad request", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Final Order",
-    operation_id = "viewFinalOrder"
+    tag = "Results",
+    operation_id = "resultsFinalOrder"
 )]
 #[axum::debug_handler]
-pub async fn view_final_order(
+pub async fn results_final_order(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<ViewFinalOrderRequest>,
-) -> Result<Json<ApiResponse<ViewFinalOrderResponse>>, AppError> {
+    Json(req): Json<ResultsFinalOrderRequest>,
+) -> Result<Json<ApiResponse<ResultsFinalOrderResponse>>, AppError> {
     let target_topic = match state.topic_service.get_topic(&req.topic_id).await {
         Ok(Some(topic)) if topic.topic_type.supports_final_order() => topic,
         Ok(_) => {
@@ -182,7 +184,7 @@ pub async fn view_final_order(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    let response = ViewFinalOrderResponse {
+    let response = ResultsFinalOrderResponse {
         topic_id: req.topic_id,
         items: results
             .into_iter()

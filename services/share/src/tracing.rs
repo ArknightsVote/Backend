@@ -9,6 +9,8 @@ use tracing_subscriber::{
     util::SubscriberInitExt as _,
 };
 
+use crate::config::TracingConfig;
+
 struct East8Time;
 
 impl FormatTime for East8Time {
@@ -24,26 +26,26 @@ impl FormatTime for East8Time {
 }
 
 pub fn init_tracing_subscriber(
-    level: &str,
-    log_file_directory: &str,
+    trace_config: &TracingConfig,
     log_target_service: &str,
 ) -> WorkerGuard {
-    let env_filter = tracing_subscriber::EnvFilter::builder()
-        .with_default_directive(level.parse().unwrap_or_else(|_| {
+    let mut env_filter = tracing_subscriber::EnvFilter::builder()
+        .with_default_directive(trace_config.level.parse().unwrap_or_else(|_| {
             tracing::error!("invalid log level in config, defaulting to DEBUG");
-            "debug".parse().unwrap()
+            tracing::Level::DEBUG.into()
         }))
-        .from_env_lossy()
-        .add_directive(
-            "async_nats=info"
-                .parse()
-                .expect("failed to parse 'async_nats=info' directive"),
-        )
-        .add_directive(
-            "globset=info"
-                .parse()
-                .expect("failed to parse 'globset=info' directive"),
-        );
+        .from_env_lossy();
+
+    for directive in &trace_config.directives {
+        match directive.parse() {
+            Ok(d) => {
+                env_filter = env_filter.add_directive(d);
+            }
+            Err(e) => {
+                tracing::error!("Failed to parse directive '{}': {}", directive, e);
+            }
+        }
+    }
 
     let is_terminal = std::io::stdout().is_terminal();
     let terminal_layer = fmt::layer()
@@ -51,7 +53,10 @@ pub fn init_tracing_subscriber(
         .with_target(false)
         .with_timer(East8Time);
 
-    let file_appender = rolling::daily(log_file_directory, format!("{log_target_service}.log"));
+    let file_appender = rolling::daily(
+        &trace_config.log_file_directory,
+        format!("{log_target_service}.log"),
+    );
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     let file_layer = fmt::layer()
         .json()

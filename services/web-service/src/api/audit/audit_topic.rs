@@ -7,14 +7,14 @@ use crate::{AppState, error::AppError};
 
 #[utoipa::path(
     post,
-    path = "/topics/audit_topic",
+    path = "/audit/topic",
     request_body = AuditTopicRequest,
     responses(
-        (status = 200, description = "Topic audited successfully", body = ApiResponse<String>),
+        (status = 200, description = "Audit topic successfully", body = ApiResponse<String>),
         (status = 404, description = "Topic not found", body = ApiResponse<String>),
         (status = 500, description = "Internal server error", body = ApiResponse<String>)
     ),
-    tag = "Topics",
+    tag = "Audit",
     operation_id = "auditTopic"
 )]
 #[axum::debug_handler]
