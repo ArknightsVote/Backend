@@ -84,4 +84,4 @@ jobs:
           docker tag $IMAGE_ID ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Push Docker image
-        run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        run: docker push --force ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
