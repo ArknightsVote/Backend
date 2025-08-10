@@ -45,4 +45,5 @@ COPY --from=builder /usr/src/ark-vote/templates ./templates
 VOLUME ["/app/config", "/app/logs"]
 
 EXPOSE 3000
-ENTRYPOINT  ["./ark-vote"]
+
+ENTRYPOINT  ["/app/ark-vote"]
