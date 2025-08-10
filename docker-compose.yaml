@@ -78,7 +78,7 @@ services:
       - ./templates:/app/templates
     networks:
       - arkvote_network
-    command: ["./ark-vote", "web-server"]
+    command: ["web-server"]
 
   nats-consumer:
     image: arkvote:latest
@@ -94,4 +94,4 @@ services:
       - ./docker_config:/app/config
     networks:
       - arkvote_network
-    command: ["./ark-vote", "nats-consumer"]
+    command: ["nats-consumer"]

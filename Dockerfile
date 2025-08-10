@@ -1,6 +1,6 @@
 # docker build -t arkvote:latest .
 # ====== Planner Stage ======
-FROM rust:1.88-slim AS chef
+FROM rust:1.89-slim AS chef
 ARG MOLD_VERSION=2.40.3
 
 WORKDIR /usr/src/ark-vote
