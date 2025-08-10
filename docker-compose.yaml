@@ -1,5 +1,9 @@
 version: '3.8'
 
+networks:
+  arkvote_network:
+    driver: bridge
+
 services:
   mongodb:
     image: docker.io/mongo:7.0
@@ -12,9 +16,14 @@ services:
       - ./data/mongodb:/data/db
     networks:
       - arkvote_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
-    image: docker.io/redis:7-alpine
+    image: docker.io/redis:8-alpine
     container_name: arkvote_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
@@ -22,56 +31,67 @@ services:
       - ./data/redis:/data
     networks:
       - arkvote_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   nats:
-    image: docker.io/nats:2.10-alpine
+    image: docker.io/nats:2.11-alpine
     container_name: arkvote_nats
     restart: unless-stopped
-    command: "--jetstream"
+    command: "-js -sd /data"
     volumes:
-      - ./data/nats:/var/lib/nats/data
+      - ./data/nats:/data
     networks:
       - arkvote_network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ark-vote:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: arkvote:latest
     container_name: arkvote_app
     restart: unless-stopped
     depends_on:
-      - mongodb
-      - redis
-      - nats
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      - APP_ENV=docker
     volumes:
       - ./character_table.json:/app/character_table.json
       - ./docker_config:/app/config
       - ./logs:/app/logs
       - ./static:/app/static
       - ./templates:/app/templates
-    ports:
-      - "3000:3000"
-    environment:
-      - APP_ENV=docker
-    user: "0"
     networks:
       - arkvote_network
-    command: ["/app/ark-vote", "web-server"]
+    command: ["./ark-vote", "web-server"]
 
   nats-consumer:
     image: arkvote:latest
     container_name: arkvote_nats_consumer
     restart: unless-stopped
     depends_on:
-      - nats
-    volumes:
-      - ./character_table.json:/app/character_table.json
-      - ./docker_config:/app/config
+      nats:
+        condition: service_healthy
     environment:
       - APP_ENV=docker
     user: "0"
+    volumes:
+      - ./docker_config:/app/config
     networks:
       - arkvote_network
-    command: ["/app/ark-vote", "nats-consumer"]
-
-networks:
-  arkvote_network:
-    driver: bridge
+    command: ["./ark-vote", "nats-consumer"]
