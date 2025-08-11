@@ -112,8 +112,8 @@ subjects = [
     "ark-vote.dlq",
 ]
 retention = "workqueue"
-max_messages = 100_000
-max_messages_per_subject = 100_000
+max_messages = 1_000_000
+max_messages_per_subject = 1_000_000
 
 [sentry]
 dsn = ""

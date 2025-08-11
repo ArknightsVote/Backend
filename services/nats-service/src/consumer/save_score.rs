@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::Arc, time::Duration,
 };
 
 use base64::{Engine as _, engine::general_purpose};
@@ -42,6 +42,7 @@ pub async fn save_score_consumer(
         .create_consumer(async_nats::jetstream::consumer::pull::Config {
             durable_name: Some(normalized_subject),
             filter_subject: filter_subject.to_string(),
+            inactive_threshold: Duration::from_secs(60),
             ..Default::default()
         })
         .await?;
