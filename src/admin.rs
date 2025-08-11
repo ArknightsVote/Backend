@@ -64,12 +64,12 @@ pub fn server(
         .expect("failed to spawn admin-http thread")
 }
 
-#[allow(dead_code)]
-fn encode<M: prost::Message>(message: &M) -> Result<Vec<u8>, prost::EncodeError> {
-    let mut buf = Vec::with_capacity(message.encoded_len());
-    message.encode(&mut buf)?;
-    Ok(buf)
-}
+// #[allow(dead_code)]
+// fn encode<M: prost::Message>(message: &M) -> Result<Vec<u8>, prost::EncodeError> {
+//     let mut buf = Vec::with_capacity(message.encoded_len());
+//     message.encode(&mut buf)?;
+//     Ok(buf)
+// }
 
 // #[cfg(target_os = "linux")]
 async fn profile(request: axum::extract::Request<Body>) -> Response<Body> {
@@ -108,11 +108,14 @@ async fn collect_pprof(
 
     tokio::time::sleep(duration).await;
 
-    let encoded_profile = encode(&guard.report().build()?.pprof()?)?;
+    let data = guard.report().build()?;
+    // let encoded_profile = encode(&guard.report().build()?.pprof()?)?;
+    let mut buf = Vec::with_capacity(data.encoded_len());
+    data.encode(&mut buf)?;
 
     // gzip profile
     let mut encoder = libflate::gzip::Encoder::new(Vec::new())?;
-    std::io::copy(&mut &encoded_profile[..], &mut encoder)?;
+    std::io::copy(&mut &buf[..], &mut encoder)?;
     let gzip_body = encoder.finish().into_result()?;
     tracing::debug!("profile encoded to gzip");
 

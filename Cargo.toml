@@ -91,7 +91,7 @@ serde.workspace = true
 eyre.workspace = true
 stable-eyre = "0.2.2"
 
-prost = "0.14.1"
+# prost = "0.14.1"
 
 git-testament = "0.2.6"
 
