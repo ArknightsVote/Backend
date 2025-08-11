@@ -126,7 +126,7 @@ max_retry = 3
 qps_limit = 500
 
 [tracing]
-level = "debug"
+level = "info"
 log_file_directory = "logs"
 directives = ["async_nats=info", "globset=info"]
 
