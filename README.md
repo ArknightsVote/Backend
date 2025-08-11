@@ -57,9 +57,7 @@ ark-vote/
 │   ├── service-test/   # 测试服务
 │   ├── share/          # 共享库
 │   └── web-service/    # Web API 服务
-├── src/                # Cli 包装
-├── static/             # 静态资源文件
-└── templates/          # 模板文件
+└── src/                # Cli 包装
 ```
 
 ## 贡献指南

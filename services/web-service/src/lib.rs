@@ -8,12 +8,7 @@ mod state;
 mod utils;
 
 use async_nats::jetstream;
-use axum::{
-    Router,
-    extract::State,
-    response::{Html, IntoResponse},
-    routing::get,
-};
+use axum::{Router, routing::get};
 use axum_prometheus::PrometheusMetricLayer;
 use eyre::Context;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
@@ -22,9 +17,8 @@ use share::{
     models::{database::VotingTopic, excel::CharacterInfo},
     snowflake::Snowflake,
 };
-use tera::Tera;
 use tower::ServiceBuilder;
-use tower_http::{cors::CorsLayer, services::ServeDir, timeout::TimeoutLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use utoipa::OpenApi as _;
 use utoipa_scalar::{Scalar, Servable as _};
 use utoipa_swagger_ui::SwaggerUi;
@@ -36,15 +30,6 @@ use crate::{
     service::TopicService,
     state::{AppState, RedisService},
 };
-
-async fn page_handler(State(app_state): State<Arc<AppState>>) -> impl IntoResponse {
-    let html = app_state
-        .tera
-        .render("page.html", &tera::Context::new())
-        .unwrap();
-
-    Html(html)
-}
 
 pub struct WebService {
     config: AppConfig,
@@ -129,9 +114,6 @@ impl WebService {
         let character_portraits = utils::fetch_portrait_image_url().await?;
         tracing::debug!("Character portraits fetched");
 
-        let tera = Tera::new("templates/**/*").context("failed to load Tera templates")?;
-        tracing::debug!("Tera templates loaded");
-
         let topic_service = TopicService::new(mongodb.clone());
         tracing::debug!("TopicService initialized");
 
@@ -146,7 +128,6 @@ impl WebService {
             snowflake,
             character_infos,
             character_portraits,
-            tera,
 
             topic_service,
         };
@@ -188,10 +169,8 @@ impl WebService {
         tracing::debug!("CORS layer initialized");
 
         let app = Router::new()
-            .route("/", get(page_handler))
             .route("/metrics", get(|| async move { metric_handle.render() }))
             .merge(api::routes())
-            .nest_service("/static", ServeDir::new("static"))
             .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
             .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
             .with_state(Arc::new(state))

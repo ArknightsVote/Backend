@@ -4,7 +4,6 @@ use share::{
     models::{api::CharacterPortrait, excel::CharacterInfo},
     snowflake::Snowflake,
 };
-use tera::Tera;
 
 use crate::service::TopicService;
 
@@ -21,7 +20,6 @@ pub struct AppState {
     pub _mongodb: mongodb::Database,
     pub jetstream: async_nats::jetstream::Context,
     pub snowflake: Snowflake,
-    pub tera: Tera,
 
     pub character_infos: Vec<CharacterInfo>,
     pub character_portraits: HashMap<i32, CharacterPortrait>,

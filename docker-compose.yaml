@@ -74,8 +74,6 @@ services:
       - ./character_table.json:/app/character_table.json
       - ./docker_config:/app/config
       - ./logs:/app/logs
-      - ./static:/app/static
-      - ./templates:/app/templates
     networks:
       - arkvote_network
     command: ["web-server"]

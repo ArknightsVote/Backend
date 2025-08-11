@@ -39,8 +39,6 @@ FROM gcr.io/distroless/cc-debian12
 WORKDIR /app
 
 COPY --from=builder /usr/src/ark-vote/target/release/ark-vote .
-COPY --from=builder /usr/src/ark-vote/static ./static
-COPY --from=builder /usr/src/ark-vote/templates ./templates
 
 VOLUME ["/app/config", "/app/logs"]
 

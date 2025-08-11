@@ -28,14 +28,8 @@ reqwest = { version = "0.12.22", features = ["json"] }
 futures = "0.3.31"
 
 axum = { version = "0.8.4", features = ["macros"] }
-tera = "1.20.0"
 tower = "0.5.2"
-tower-http = { version = "0.6.4", features = [
-    "cors",
-    "fs",
-    "timeout",
-    "trace",
-] }
+tower-http = { version = "0.6.4", features = ["cors", "timeout", "trace"] }
 utoipa = { version = "5.4.0", features = ["uuid", "axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 utoipa-scalar = { version = "0.3", features = ["axum"] }
