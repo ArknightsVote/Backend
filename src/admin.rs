@@ -1,6 +1,12 @@
 mod health;
 
-use axum::{Router, routing::get};
+#[allow(unused_imports)]
+use axum::{
+    Router,
+    body::Body,
+    http::{self, Response},
+    routing::get,
+};
 use health::{Health, check_health};
 
 pub const PORT: u16 = 8443;
@@ -40,6 +46,11 @@ pub fn server(
                     .route("/livez", get(check_health))
                     .with_state(state);
 
+                #[cfg(target_os = "linux")]
+                {
+                    app = app.route("/pprof", get(profile));
+                }
+
                 let http_task: tokio::task::JoinHandle<Result<(), eyre::Error>> =
                     tokio::task::spawn(async move {
                         axum::serve(listener, app.into_make_service())
@@ -51,4 +62,64 @@ pub fn server(
             })
         })
         .expect("failed to spawn admin-http thread")
+}
+
+#[allow(dead_code)]
+fn encode<M: prost::Message>(message: &M) -> Result<Vec<u8>, prost::EncodeError> {
+    let mut buf = Vec::with_capacity(message.encoded_len());
+    message.encode(&mut buf)?;
+    Ok(buf)
+}
+
+#[cfg(target_os = "linux")]
+async fn profile(request: axum::extract::Request<Body>) -> Response<Body> {
+    let duration = request.uri().query().and_then(|query| {
+        form_urlencoded::parse(query.as_bytes())
+            .find(|(k, _)| k == "seconds")
+            .and_then(|(_, v)| v.parse().ok())
+            .map(std::time::Duration::from_secs)
+    });
+
+    match collect_pprof(duration).await {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::warn!(%error, "admin http server error");
+            Response::builder()
+                .status(http::StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::from(axum::body::Bytes::from("internal error")))
+                .unwrap()
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn collect_pprof(
+    duration: Option<std::time::Duration>,
+) -> Result<Response<Body>, eyre::Error> {
+    let duration = duration.unwrap_or_else(|| std::time::Duration::from_secs(2));
+    tracing::debug!(duration_seconds = duration.as_secs(), "profiling");
+
+    let guard = pprof::ProfilerGuardBuilder::default()
+        .frequency(1000)
+        // From the pprof docs, this blocklist helps prevent deadlock with
+        // libgcc's unwind.
+        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+        .build()?;
+
+    tokio::time::sleep(duration).await;
+
+    let encoded_profile = encode(&guard.report().build()?.pprof()?)?;
+
+    // gzip profile
+    let mut encoder = libflate::gzip::Encoder::new(Vec::new())?;
+    std::io::copy(&mut &encoded_profile[..], &mut encoder)?;
+    let gzip_body = encoder.finish().into_result()?;
+    tracing::debug!("profile encoded to gzip");
+
+    Response::builder()
+        .header(http::header::CONTENT_LENGTH, gzip_body.len() as u64)
+        .header(http::header::CONTENT_TYPE, "application/octet-stream")
+        .header(http::header::CONTENT_ENCODING, "gzip")
+        .body(Body::from(gzip_body))
+        .map_err(From::from)
 }
