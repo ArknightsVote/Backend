@@ -71,7 +71,7 @@ fn encode<M: prost::Message>(message: &M) -> Result<Vec<u8>, prost::EncodeError>
     Ok(buf)
 }
 
-#[cfg(target_os = "linux")]
+// #[cfg(target_os = "linux")]
 async fn profile(request: axum::extract::Request<Body>) -> Response<Body> {
     let duration = request.uri().query().and_then(|query| {
         form_urlencoded::parse(query.as_bytes())
@@ -92,7 +92,7 @@ async fn profile(request: axum::extract::Request<Body>) -> Response<Body> {
     }
 }
 
-#[cfg(target_os = "linux")]
+// #[cfg(target_os = "linux")]
 async fn collect_pprof(
     duration: Option<std::time::Duration>,
 ) -> Result<Response<Body>, eyre::Error> {
