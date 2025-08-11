@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use axum::{Router, routing::post};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 use crate::state::AppState;
 
@@ -21,6 +24,6 @@ pub fn ballot_routes() -> Router<Arc<AppState>> {
         .route("/new", post(ballot_create)) // 创建新 ballot
         .route("/save", post(ballot_save)) // 保存 ballot
         .route("/skip", post(ballot_skip)) // 跳过 ballot
-        .route("/bench_new", post(ballot_bench_new))
-        .route("/bench_save", post(ballot_bench_save))
+        .route("/bench_new", get(ballot_bench_new))
+        .route("/bench_save", get(ballot_bench_save))
 }
