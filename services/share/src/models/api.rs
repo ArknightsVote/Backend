@@ -94,7 +94,6 @@ impl axum::response::IntoResponse for ApiResponse<()> {
 #[derive(Default, Debug, Deserialize, Serialize, ToSchema)]
 pub struct BallotCreateRequest {
     pub topic_id: String,
-    pub ballot_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -125,13 +124,24 @@ pub enum BallotCreateResponse {
     },
 }
 
+#[derive(Default, Debug, Deserialize, Serialize, ToSchema)]
+pub struct BallotSkipRequest {
+    pub topic_id: String,
+    pub ballot_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct BallotSkipResponse {
+    pub code: i32,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GroupwiseSelection {
     Left,
     Right,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct PairwiseSaveScore {
     pub topic_id: String,
     pub ballot_id: String,
@@ -139,7 +149,7 @@ pub struct PairwiseSaveScore {
     pub loser: i32,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct SetwiseSaveScore {
     pub topic_id: String,
     pub ballot_id: String,
@@ -149,7 +159,7 @@ pub struct SetwiseSaveScore {
     pub selected_right: Vec<i32>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct GroupwiseSaveScore {
     pub topic_id: String,
     pub ballot_id: String,
@@ -158,7 +168,7 @@ pub struct GroupwiseSaveScore {
     pub selected_group: GroupwiseSelection,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct PluralitySaveScore {
     pub topic_id: String,
     pub ballot_id: String,
@@ -166,7 +176,7 @@ pub struct PluralitySaveScore {
     pub selected: i32,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 #[serde(tag = "topic_type", rename_all = "snake_case")]
 pub enum BallotSaveRequest {
     Pairwise(PairwiseSaveScore),

@@ -4,7 +4,9 @@ use axum::{Json, extract::State};
 use rand::seq::IndexedRandom as _;
 use redis::AsyncCommands as _;
 use share::models::{
-    api::{ApiData, ApiMsg, ApiResponse, BallotCreateRequest, BallotCreateResponse},
+    api::{
+        ApiData, ApiMsg, ApiResponse, BallotCreateResponse, BallotSaveRequest, PairwiseSaveScore,
+    },
     database::VotingTopicType,
 };
 
@@ -24,24 +26,15 @@ fn select_operators(operator_ids: &[i32]) -> Result<(i32, i32), AppError> {
     Ok((selected[0], selected[1]))
 }
 
-#[utoipa::path(
-    post,
-    path = "/ballot/new",
-    request_body = BallotCreateRequest,
-    responses(
-        (status = 200, description = "Create a new ballot", body = ApiResponse<BallotCreateResponse>),
-        (status = 404, description = "Topic not found or inactive", body = ApiResponse<String>),
-        (status = 500, description = "Internal server error", body = ApiResponse<String>)
-    ),
-    tag = "Ballot",
-    operation_id = "ballotCreate"
-)]
 #[axum::debug_handler]
-pub async fn ballot_create(
+pub async fn ballot_bench_new(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<BallotCreateRequest>,
 ) -> Result<Json<ApiResponse<BallotCreateResponse>>, AppError> {
-    let topic = match state.topic_service.get_topic(&req.topic_id).await {
+    let topic = match state
+        .topic_service
+        .get_topic("crisis_v2_season_4_1_benchtest")
+        .await
+    {
         Ok(Some(topic)) if topic.is_topic_active() => topic,
         Ok(_) => {
             return Ok(Json(ApiResponse {
@@ -87,6 +80,16 @@ pub async fn ballot_create(
             let ballot_value = format!("{left},{right}");
             let _: () = conn.set_ex(&ballot_key, &ballot_value, 86400).await?; // 24 hours expiration
 
+            state.bench_ballot_store.insert(
+                ballot_key,
+                BallotSaveRequest::Pairwise(PairwiseSaveScore {
+                    topic_id: topic_id.clone(),
+                    ballot_id: ballot_id.clone(),
+                    winner: left,
+                    loser: right,
+                }),
+            );
+
             let rsp = BallotCreateResponse::Pairwise {
                 topic_id,
                 ballot_id,
@@ -105,34 +108,5 @@ pub async fn ballot_create(
             data: ApiData::Empty,
             message: ApiMsg::UnsupportedTopicType,
         })),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::api::utils::generate_random_string;
-
-    use super::*;
-
-    #[test]
-    fn test_generate_random_string() {
-        let s = generate_random_string(10);
-        assert_eq!(s.len(), 10);
-        assert!(s.chars().all(|c| c.is_alphanumeric()));
-    }
-
-    #[test]
-    fn test_select_operators() {
-        let operators = vec![1, 2, 3, 4, 5];
-        let (left, right) = select_operators(&operators).unwrap();
-        assert_ne!(left, right);
-        assert!(operators.contains(&left));
-        assert!(operators.contains(&right));
-    }
-
-    #[test]
-    fn test_select_operators_insufficient() {
-        let operators = vec![1];
-        assert!(select_operators(&operators).is_err());
     }
 }

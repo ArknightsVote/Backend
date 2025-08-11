@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
+use dashmap::DashMap;
 use share::{
-    models::{api::CharacterPortrait, excel::CharacterInfo},
+    models::{
+        api::{BallotSaveRequest, CharacterPortrait},
+        excel::CharacterInfo,
+    },
     snowflake::Snowflake,
 };
 
@@ -25,4 +29,6 @@ pub struct AppState {
     pub character_portraits: HashMap<i32, CharacterPortrait>,
 
     pub topic_service: TopicService,
+
+    pub bench_ballot_store: DashMap<String, BallotSaveRequest>,
 }

@@ -1,11 +1,11 @@
+mod ballot_skip;
 mod dlq;
-mod new_compare_request;
 mod save_score;
 
 use std::{borrow::Cow, collections::HashMap, pin::Pin, sync::Arc};
 
+use ballot_skip::ballot_skip_consumer;
 use dlq::dlq_consumer;
-use new_compare_request::new_compare_request_consumer;
 use save_score::save_score_consumer;
 use share::config::AppConfig;
 
@@ -50,7 +50,7 @@ pub fn available_consumers() -> HashMap<&'static str, ConsumerConfig> {
     }
 
     HashMap::from([
-        consumer!("new_compare_request", new_compare_request_consumer),
+        consumer!("ballot_skip", ballot_skip_consumer),
         consumer!("save_score", save_score_consumer),
         consumer!("dlq", dlq_consumer),
     ])

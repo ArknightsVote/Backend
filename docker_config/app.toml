@@ -52,6 +52,28 @@ audit_time = "2023-09-30T12:00:00Z"
 audit_reason = "Preset vote topic approved"
 audit_category = "ContentCompliance"
 
+[[vote.preset_vote_topic]]
+id = "crisis_v2_season_4_1_benchtest"
+name = "岁的界园志异-benchtest"
+title = "岁的界园志异 肉鸽抓位投票-benchtest"
+description = "岁的界园志异 肉鸽抓位投票-benchtest"
+topic_type = "Pairwise"
+created_at = "2025-08-11T00:00:00Z"
+open_time = "2025-08-11T00:00:00Z"
+close_time = "2025-08-31T23:59:59Z"
+is_active = true
+
+[vote.preset_vote_topic.candidate_pool]
+type = "by_rarity"
+params = { rarities = ["TIER_6"], include_not_obtainable = false }
+
+[vote.preset_vote_topic.status.Approved]
+auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"
+auditor_name = "admin"
+audit_time = "2023-09-30T12:00:00Z"
+audit_reason = "Preset vote topic approved"
+audit_category = "ContentCompliance"
+
 [cors]
 allow_origin = ["*"]
 allow_methods = ["GET", "POST", "OPTIONS"]
@@ -70,9 +92,9 @@ epoch = 1609459200000
 url = "nats:4222"
 
 [[nats.consumers]]
-name = "new_compare_request"
+name = "ballot_skip"
 enabled = true
-subject = "ark-vote.new_compare_request"
+subject = "ark-vote.ballot_skip"
 [[nats.consumers]]
 name = "save_score"
 enabled = true
@@ -85,8 +107,7 @@ subject = "ark-vote.dlq"
 [nats.stream_config]
 name = "ark-vote"
 subjects = [
-    "ark-vote.new_compare_request",
-    "ark-vote.new_compare_response",
+    "ark-vote.ballot_skip",
     "ark-vote.save_score",
     "ark-vote.dlq",
 ]
@@ -107,3 +128,4 @@ qps_limit = 500
 [tracing]
 level = "debug"
 log_file_directory = "logs"
+directives = ["async_nats=info", "globset=info"]

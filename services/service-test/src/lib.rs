@@ -65,7 +65,7 @@ impl ServiceTester {
         };
 
         let data = ResultsFinalOrderRequest {
-            topic_id: "crisis_v2_season_4_1".to_string(),
+            topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
         };
         let init_data = self.results_final_order(&client, &data).await?;
         let init_score: i64 = init_data.items.iter().map(|i| i.win + i.lose).sum();
@@ -166,7 +166,7 @@ impl ServiceTester {
             .results_final_order(
                 &client,
                 &ResultsFinalOrderRequest {
-                    topic_id: "crisis_v2_season_4_1".to_string(),
+                    topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
                 },
             )
             .await?;
@@ -216,8 +216,7 @@ impl ServiceTester {
             let start = Instant::now();
 
             let data = BallotCreateRequest {
-                topic_id: "crisis_v2_season_4_1".to_string(),
-                ballot_id: "".to_string(),
+                topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
             };
             let compare = match self.ballot_create(&client, &data).await {
                 Ok(c) => c,
@@ -243,7 +242,7 @@ impl ServiceTester {
             assert!(left > 0 && right > 0, "left and right should be positive");
 
             let data = BallotSaveRequest::Pairwise(PairwiseSaveScore {
-                topic_id: "crisis_v2_season_4_1".to_string(),
+                topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
                 ballot_id,
                 winner: left,
                 loser: right,
@@ -274,8 +273,7 @@ impl ServiceTester {
         let client = Client::new();
 
         let data = BallotCreateRequest {
-            topic_id: "crisis_v2_season_4_1".to_string(),
-            ballot_id: "".to_string(),
+            topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
         };
         let data = self.ballot_create(&client, &data).await?;
         let (left, right, ballot_id) = match data {
@@ -292,7 +290,7 @@ impl ServiceTester {
         };
 
         let data = BallotSaveRequest::Pairwise(PairwiseSaveScore {
-            topic_id: "crisis_v2_season_4_1".to_string(),
+            topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
             ballot_id,
             winner: left,
             loser: right,
@@ -302,14 +300,14 @@ impl ServiceTester {
         self.results_final_order(
             &client,
             &ResultsFinalOrderRequest {
-                topic_id: "crisis_v2_season_4_1".to_string(),
+                topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
             },
         )
         .await?;
         self.results_1v1_matrix(
             &client,
             &Results1v1MatrixRequest {
-                topic_id: "crisis_v2_season_4_1".to_string(),
+                topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
             },
         )
         .await?;

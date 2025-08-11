@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use futures::StreamExt as _;
-use share::{config::AppConfig, models::api::BallotCreateRequest};
+use share::{config::AppConfig, models::api::BallotSkipRequest};
 
 use crate::{
     AppDatabase,
@@ -11,7 +11,7 @@ use crate::{
 
 use super::normalize_subject;
 
-pub async fn new_compare_request_consumer(
+pub async fn ballot_skip_consumer(
     filter_subject: Cow<'static, str>,
     stream: async_nats::jetstream::stream::Stream,
     database: Arc<AppDatabase>,
@@ -50,9 +50,9 @@ pub async fn new_compare_request_consumer(
 
             runtime.block_on(async {
                 tokio::select! {
-                    res = process_new_compare_requests(&consumer, &mut conn, &database.redis.del_multiple_script) => {
+                    res = process_ballot_skip(&consumer, &mut conn, &database.redis.del_multiple_script) => {
                         if let Err(e) = res {
-                            tracing::error!("error in process_new_compare_requests: {}", e);
+                            tracing::error!("error in process_ballot_skip: {}", e);
                             tokio::time::sleep(CONSUMER_RETRY_DELAY).await;
                         }
                     },
@@ -63,7 +63,7 @@ pub async fn new_compare_request_consumer(
     Ok(())
 }
 
-async fn process_new_compare_requests(
+async fn process_ballot_skip(
     consumer: &async_nats::jetstream::consumer::Consumer<
         async_nats::jetstream::consumer::pull::Config,
     >,
@@ -83,11 +83,11 @@ async fn process_new_compare_requests(
         while let Some(message) = messages.next().await {
             match message {
                 Ok(msg) => {
-                    let data: BallotCreateRequest = match serde_json::from_slice(&msg.payload) {
+                    let data: BallotSkipRequest = match serde_json::from_slice(&msg.payload) {
                         Ok(data) => data,
                         Err(e) => {
                             tracing::error!(
-                                "error deserializing new compare request message: {}",
+                                "error deserializing ballot skip request message: {}",
                                 e
                             );
                             msg.double_ack().await?;
@@ -97,7 +97,7 @@ async fn process_new_compare_requests(
                     batch_messages.push(data);
                 }
                 Err(e) => {
-                    tracing::error!("error fetching new compare request message: {}", e);
+                    tracing::error!("error fetching ballot skip request message: {}", e);
                     continue;
                 }
             }
@@ -112,7 +112,7 @@ async fn process_new_compare_requests(
 
         let ballot_keys = batch_messages
             .iter()
-            .map(|msg| format!("ballot:{}", msg.ballot_id))
+            .map(|msg| format!("{}:ballot:{}", msg.topic_id, msg.ballot_id))
             .collect::<Vec<_>>();
 
         let _: () = del_multiple_script
@@ -121,7 +121,7 @@ async fn process_new_compare_requests(
             .await?;
 
         if count % 1000 == 0 || processed_count > 0 {
-            tracing::debug!("processed {} new compare request messages", count);
+            tracing::debug!("processed {} ballot skip request messages", count);
         }
 
         batch_messages.clear();

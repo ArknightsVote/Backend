@@ -10,6 +10,7 @@ mod utils;
 use async_nats::jetstream;
 use axum::{Router, routing::get};
 use axum_prometheus::PrometheusMetricLayer;
+use dashmap::DashMap;
 use eyre::Context;
 use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use share::{
@@ -130,6 +131,8 @@ impl WebService {
             character_portraits,
 
             topic_service,
+
+            bench_ballot_store: DashMap::new(),
         };
         tracing::debug!("AppState initialized");
 
