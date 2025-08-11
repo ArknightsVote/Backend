@@ -35,7 +35,7 @@ use crate::{
 
 #[axum::debug_handler]
 pub async fn get_task_stats(State(state): State<Arc<AppState>>) -> Json<task::TaskStats> {
-    Json(state.task_manager.get_stats().await)
+    Json(state.task_manager.get_stats())
 }
 
 pub struct WebService {

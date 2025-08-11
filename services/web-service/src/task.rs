@@ -1,9 +1,16 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{
+    future::Future,
+    pin::Pin,
+    panic::AssertUnwindSafe,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 use serde::Serialize;
-use tokio::sync::{mpsc, Mutex, Semaphore};
+use tokio::sync::{mpsc, Semaphore};
 use tracing::error;
 use futures::FutureExt;
-use std::panic::AssertUnwindSafe;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 type Task = Box<dyn FnOnce() -> BoxFuture + Send + 'static>;
@@ -27,91 +34,82 @@ impl Default for TaskStats {
 
 pub struct TaskManager {
     sender: mpsc::UnboundedSender<Task>,
-    stats: Arc<Mutex<TaskStats>>,
+    queued: AtomicUsize,
+    running: AtomicUsize,
+    completed: AtomicUsize,
     concurrency: usize,
 }
 
 impl TaskManager {
     pub fn new(concurrency: usize) -> Arc<Self> {
         let (tx, mut rx) = mpsc::unbounded_channel::<Task>();
-        let stats = Arc::new(Mutex::new(TaskStats::default()));
-        let stats_for_dispatch = stats.clone();
+
+        let manager = Arc::new(Self {
+            sender: tx,
+            queued: AtomicUsize::new(0),
+            running: AtomicUsize::new(0),
+            completed: AtomicUsize::new(0),
+            concurrency,
+        });
+
+        let stats_for_dispatch = manager.clone();
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         tokio::spawn({
             let semaphore = semaphore.clone();
             async move {
                 while let Some(task) = rx.recv().await {
-                    {
-                        let mut s = stats_for_dispatch.lock().await;
-                        s.queued = s.queued.saturating_sub(1);
-                    }
+                    stats_for_dispatch.queued.fetch_sub(1, Ordering::Relaxed);
 
                     let permit = semaphore.clone().acquire_owned().await.unwrap();
 
+                    stats_for_dispatch.running.fetch_add(1, Ordering::Relaxed);
                     let stats_worker = stats_for_dispatch.clone();
 
                     tokio::spawn(async move {
-                        {
-                            let mut s = stats_worker.lock().await;
-                            s.running += 1;
-                        }
-
                         let fut = (task)();
 
                         let res = AssertUnwindSafe(fut).catch_unwind().await;
 
-                        match res {
-                            Ok(_) => {
-                                // completed normally
-                            }
-                            Err(e) => {
-                                error!("Background task panicked: {:?}", e);
-                            }
+                        if let Err(e) = res {
+                            error!("Background task panicked: {:?}", e);
                         }
 
-                        {
-                            let mut s = stats_worker.lock().await;
-                            s.running = s.running.saturating_sub(1);
-                            s.completed += 1;
-                        }
+                        stats_worker.running.fetch_sub(1, Ordering::Relaxed);
+                        stats_worker.completed.fetch_add(1, Ordering::Relaxed);
 
                         drop(permit);
                     });
                 }
 
-                tracing::info!("Task dispatcher loop ended (receiver closed)");
+                tracing::info!("Task dispatcher ended (receiver closed).");
             }
         });
 
-        Arc::new(Self {
-            sender: tx,
-            stats,
-            concurrency,
-        })
+        manager
     }
 
-    pub async fn spawn<Fut, F>(&self, f: F)
+    pub fn spawn<Fut, F>(&self, f: F)
     where
         Fut: Future<Output = ()> + Send + 'static,
         F: FnOnce() -> Fut + Send + 'static,
     {
-        {
-            let mut s = self.stats.lock().await;
-            s.queued = s.queued.saturating_add(1);
-        }
+        self.queued.fetch_add(1, Ordering::Relaxed);
 
         let task: Task = Box::new(move || Box::pin(f()) as BoxFuture);
 
         if let Err(e) = self.sender.send(task) {
+            self.queued.fetch_sub(1, Ordering::Relaxed);
             error!("Failed to enqueue background task (receiver closed): {:?}", e);
-            let mut s = self.stats.lock().await;
-            s.queued = s.queued.saturating_sub(1);
         }
     }
 
-    pub async fn get_stats(&self) -> TaskStats {
-        self.stats.lock().await.clone()
+    pub fn get_stats(&self) -> TaskStats {
+        TaskStats {
+            queued: self.queued.load(Ordering::Relaxed),
+            running: self.running.load(Ordering::Relaxed),
+            completed: self.completed.load(Ordering::Relaxed),
+        }
     }
 
     pub fn concurrency(&self) -> usize {
