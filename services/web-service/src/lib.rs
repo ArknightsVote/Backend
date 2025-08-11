@@ -124,6 +124,9 @@ impl WebService {
         let topic_service = TopicService::new(mongodb.clone());
         tracing::debug!("TopicService initialized");
 
+        let task_manager = TaskManager::new(self.config.task_manager.concurrency);
+        tracing::debug!("TaskManager initialized");
+
         let state = AppState {
             jetstream,
             redis: RedisService {
@@ -139,7 +142,7 @@ impl WebService {
             topic_service,
 
             bench_ballot_store: DashMap::new(),
-            task_manager: TaskManager::new(500),
+            task_manager,
         };
         tracing::debug!("AppState initialized");
 

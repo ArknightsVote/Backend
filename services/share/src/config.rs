@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub snowflake: SnowflakeConfig,
     pub nats: NatsConfig,
     pub test: TestConfig,
+    pub task_manager: TaskManagerConfig,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -95,6 +96,11 @@ pub struct TestConfig {
     pub concurrency_limit: usize,
     pub max_retry: usize,
     pub qps_limit: u32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TaskManagerConfig {
+    pub concurrency: usize,
 }
 
 impl TomlConfig for AppConfig {
