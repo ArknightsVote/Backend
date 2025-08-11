@@ -1,4 +1,5 @@
 use std::{future::Future, pin::Pin, sync::Arc};
+use serde::Serialize;
 use tokio::sync::{mpsc, Mutex, Semaphore};
 use tracing::error;
 use futures::FutureExt;
@@ -7,7 +8,7 @@ use std::panic::AssertUnwindSafe;
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 type Task = Box<dyn FnOnce() -> BoxFuture + Send + 'static>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TaskStats {
     pub queued: usize,
     pub running: usize,

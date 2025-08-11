@@ -9,7 +9,7 @@ mod utils;
 mod task;
 
 use async_nats::jetstream;
-use axum::{Router, routing::get};
+use axum::{extract::State, routing::get, Json, Router};
 use axum_prometheus::PrometheusMetricLayer;
 use dashmap::DashMap;
 use eyre::Context;
@@ -32,6 +32,11 @@ use crate::{
     service::TopicService,
     state::{AppState, RedisService}, task::TaskManager,
 };
+
+#[axum::debug_handler]
+pub async fn get_task_stats(State(state): State<Arc<AppState>>) -> Json<task::TaskStats> {
+    Json(state.task_manager.get_stats().await)
+}
 
 pub struct WebService {
     config: AppConfig,
@@ -175,6 +180,7 @@ impl WebService {
 
         let app = Router::new()
             .route("/metrics", get(|| async move { metric_handle.render() }))
+            .route("/task_stats", get(get_task_stats))
             .merge(api::routes())
             .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
             .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
