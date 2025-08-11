@@ -18,7 +18,28 @@ pub async fn ballot_bench_save(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ApiResponse<BallotSaveResponse>>, AppError> {
-    let req = state.bench_ballot_store.iter().next().unwrap().clone();
+    let req = match state.bench_ballot_store.iter().next() {
+        Some(entry) => {
+            let key = entry.key().clone();
+            match state.bench_ballot_store.remove(&key) {
+                Some((_, req)) => req,
+                None => {
+                    return Ok(Json(ApiResponse {
+                        status: 404,
+                        data: ApiData::Empty,
+                        message: ApiMsg::BenchBallotNotFound,
+                    }));
+                }
+            }
+        }
+        None => {
+            return Ok(Json(ApiResponse {
+                status: 404,
+                data: ApiData::Empty,
+                message: ApiMsg::BenchBallotNotFound,
+            }));
+        }
+    };
 
     let _target_topic = match state.topic_service.get_topic(req.topic_id()).await {
         Ok(Some(topic)) if topic.is_topic_active() && topic.topic_type.matches_request(&req) => {

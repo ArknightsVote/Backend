@@ -25,6 +25,8 @@ pub enum ApiMsg {
     BallotWinnerCannotBeLoser,
 
     UnsupportedTopicType,
+
+    BenchBallotNotFound,
 }
 
 impl fmt::Display for ApiMsg {
@@ -50,6 +52,8 @@ impl fmt::Display for ApiMsg {
             ApiMsg::BallotWinnerCannotBeLoser => write!(f, "Ballot winner cannot be loser"),
 
             ApiMsg::UnsupportedTopicType => write!(f, "Unsupported topic type"),
+
+            ApiMsg::BenchBallotNotFound => write!(f, "Bench ballot not found"),
         }
     }
 }
