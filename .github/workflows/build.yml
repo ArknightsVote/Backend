@@ -53,7 +53,6 @@ jobs:
           path: ${{ runner.os == 'Windows' && 'target/release/ark-vote.exe' || 'target/release/ark-vote' }}
 
   docker-build:
-    needs: build
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
