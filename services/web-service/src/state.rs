@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use dashmap::DashMap;
 use share::{
@@ -9,7 +9,7 @@ use share::{
     snowflake::Snowflake,
 };
 
-use crate::service::TopicService;
+use crate::{service::TopicService, task::TaskManager};
 
 #[derive(Clone)]
 pub struct RedisService {
@@ -31,4 +31,6 @@ pub struct AppState {
     pub topic_service: TopicService,
 
     pub bench_ballot_store: DashMap<String, BallotSaveRequest>,
+
+    pub task_manager: Arc<TaskManager>,
 }

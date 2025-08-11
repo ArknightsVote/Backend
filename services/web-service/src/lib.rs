@@ -6,6 +6,7 @@ mod error;
 mod service;
 mod state;
 mod utils;
+mod task;
 
 use async_nats::jetstream;
 use axum::{Router, routing::get};
@@ -29,7 +30,7 @@ use crate::{
     constants::LUA_SCRIPT_GET_FINAL_ORDER,
     error::AppError,
     service::TopicService,
-    state::{AppState, RedisService},
+    state::{AppState, RedisService}, task::TaskManager,
 };
 
 pub struct WebService {
@@ -133,6 +134,7 @@ impl WebService {
             topic_service,
 
             bench_ballot_store: DashMap::new(),
+            task_manager: TaskManager::new(500),
         };
         tracing::debug!("AppState initialized");
 

@@ -99,12 +99,12 @@ tracing.workspace = true
 
 mimalloc = "0.1.47"
 
-form_urlencoded = "1.2.1"
-libflate = "2.1.0"
-pprof = { version = "0.15.0", features = [
-    "prost",
-    "prost-codec",
-] }
+# form_urlencoded = "1.2.1"
+# libflate = "2.1.0"
+# pprof = { version = "0.15.0", features = [
+#     "prost",
+#     "prost-codec",
+# ] }
 
 [profile.release]
 strip = true

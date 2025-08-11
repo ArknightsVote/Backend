@@ -102,23 +102,44 @@ pub async fn ballot_save(
                 lose: loser,
             });
 
-            tokio::spawn({
-                let state = state.clone();
-                let ballot = match serde_json::to_vec(&ballot) {
-                    Ok(data) => data,
-                    Err(e) => {
-                        tracing::error!("Failed to serialize ballot: {}", e);
-                        return Err(AppError::SerdeJson(e));
+            // tokio::spawn({
+            //     let state = state.clone();
+            //     let ballot = match serde_json::to_vec(&ballot) {
+            //         Ok(data) => data,
+            //         Err(e) => {
+            //             tracing::error!("Failed to serialize ballot: {}", e);
+            //             return Err(AppError::SerdeJson(e));
+            //         }
+            //     };
+            //     async move {
+            //         if let Err(e) =
+            //             publish_and_ack(&state.jetstream, "ark-vote.save_score", ballot).await
+            //         {
+            //             tracing::error!("Failed to publish ballot: {}", e);
+            //         }
+            //     }
+            // });
+
+            state
+                .task_manager
+                .spawn({
+                    let state = state.clone();
+                    let ballot = match serde_json::to_vec(&ballot) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            tracing::error!("Failed to serialize ballot: {}", e);
+                            return Err(AppError::SerdeJson(e));
+                        }
+                    };
+                    move || async move {
+                        if let Err(e) =
+                            publish_and_ack(&state.jetstream, "ark-vote.save_score", ballot).await
+                        {
+                            tracing::error!("Failed to publish ballot: {}", e);
+                        }
                     }
-                };
-                async move {
-                    if let Err(e) =
-                        publish_and_ack(&state.jetstream, "ark-vote.save_score", ballot).await
-                    {
-                        tracing::error!("Failed to publish ballot: {}", e);
-                    }
-                }
-            });
+                })
+                .await;
 
             Ok(Json(ApiResponse {
                 status: 0,
