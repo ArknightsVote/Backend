@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-pub const CONSUMER_BATCH_SIZE: usize = 100;
+pub const CONSUMER_BATCH_SIZE: usize = 200;
 pub const CONSUMER_RETRY_DELAY: Duration = Duration::from_secs(5);
 pub const DLQ_RETRY_DELAY: Duration = Duration::from_secs(10);
 pub const DLQ_MAX_RETRIES: u32 = 5;

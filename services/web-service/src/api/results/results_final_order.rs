@@ -145,7 +145,7 @@ pub async fn results_final_order(
 
     let mut conn = state.redis.connection.clone();
 
-    let (operator_values, total_valid_ballots): (Vec<Option<String>>, i64) = match state
+    let (operator_values, total_valid_ballots): (Vec<Option<String>>, Option<i64>) = match state
         .redis
         .final_order_script
         .key(&req.topic_id)
@@ -198,7 +198,7 @@ pub async fn results_final_order(
                 rate: format!("{:.1}%", r.rate),
             })
             .collect(),
-        count: total_valid_ballots,
+        count: total_valid_ballots.unwrap_or(0),
     };
 
     Ok(Json(ApiResponse {

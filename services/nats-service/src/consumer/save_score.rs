@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    sync::Arc, time::Duration,
+    sync::Arc,
 };
 
 use base64::{Engine as _, engine::general_purpose};
@@ -42,7 +42,6 @@ pub async fn save_score_consumer(
         .create_consumer(async_nats::jetstream::consumer::pull::Config {
             durable_name: Some(normalized_subject),
             filter_subject: filter_subject.to_string(),
-            inactive_threshold: Duration::from_secs(60),
             ..Default::default()
         })
         .await?;
@@ -294,6 +293,7 @@ async fn process_pairwise_ballot_batch(
 
     let vote_config = &app_config.vote;
     let mut failed_messages = Vec::new();
+    let mut ignored_messages = Vec::new();
 
     // 第一步：批量验证ballot codes
     let validation_results =
@@ -317,7 +317,21 @@ async fn process_pairwise_ballot_batch(
         let (ballot_left, ballot_right) =
             match validation_results.get(item.ballot.info.ballot_id.as_ref()) {
                 Some(Ok((left, right))) => (*left, *right),
-                Some(Err(_)) | None => {
+                Some(Err(e)) => {
+                    if !matches!(e, AppError::InvalidBallotCode(_)) {
+                        tracing::warn!("ballot vaild error: {}", e);
+                        failed_messages.push(item.message.clone());
+                        continue;
+                    }
+                    ignored_messages.push(item.message.clone());
+                    continue;
+                }
+                None => {
+                    tracing::warn!(
+                        "invalid ballot code: {} for code={}",
+                        item.ballot.info.ballot_id,
+                        item.ballot.info.ballot_id
+                    );
                     failed_messages.push(item.message.clone());
                     continue;
                 }
@@ -399,8 +413,15 @@ async fn process_pairwise_ballot_batch(
         }
     }
 
+    // 第七步：确认所有需要丢掉的消息
+    for msg in ignored_messages.iter() {
+        if let Err(e) = msg.double_ack().await {
+            tracing::error!("failed to double_ack ignored message: {}", e);
+        }
+    }
+
     Ok(BatchProcessResult {
-        success_count: valid_ballots.len(),
+        success_count: valid_ballots.len() + ignored_messages.len(),
         failed_messages,
     })
 }

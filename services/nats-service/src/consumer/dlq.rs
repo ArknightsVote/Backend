@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc, time::Duration};
+use std::{borrow::Cow, sync::Arc};
 
 use base64::{Engine as _, engine::general_purpose};
 use futures::StreamExt as _;
@@ -32,7 +32,6 @@ pub async fn dlq_consumer(
         .create_consumer(async_nats::jetstream::consumer::pull::Config {
             durable_name: Some(normalized_subject),
             filter_subject: filter_subject.to_string(),
-            inactive_threshold: Duration::from_secs(60),
             ..Default::default()
         })
         .await?;
