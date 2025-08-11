@@ -25,7 +25,7 @@ pub async fn results_1v1_matrix(
     State(state): State<Arc<AppState>>,
     Json(req): Json<Results1v1MatrixRequest>,
 ) -> Result<Json<ApiResponse<Results1v1MatrixResponse>>, AppError> {
-    let _target_topic = match state.topic_service.get_topic(&req.topic_id).await {
+    let target_topic = match state.topic_service.get_topic(&req.topic_id).await {
         Ok(Some(topic)) if topic.topic_type.supports_1v1_matrix() => topic,
         Ok(_) => {
             return Ok(Json(ApiResponse {
@@ -45,11 +45,12 @@ pub async fn results_1v1_matrix(
 
     let mut conn = state.redis.connection.clone();
 
-    let data: HashMap<String, i64> = conn.hgetall("op_matrix").await?;
+    let target_key = format!("{}:op_matrix", target_topic.id);
+    let data: HashMap<String, i64> = conn.hgetall(target_key).await?;
 
     Ok(Json(ApiResponse {
         status: 0,
-        data: ApiData::Data(Results1v1MatrixResponse { data }),
+        data: ApiData::Data(Results1v1MatrixResponse(data)),
         message: ApiMsg::OK,
     }))
 }

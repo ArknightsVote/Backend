@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use axum::{Json, extract::State};
 use share::models::api::{
-    ApiData, ApiMsg, ApiResponse, CharacterPortrait, TopicCandidatePoolRequest, TopicCandidatePoolResponse
+    ApiData, ApiMsg, ApiResponse, CharacterPortrait, TopicCandidatePoolRequest,
+    TopicCandidatePoolResponse,
 };
 
 use crate::{AppState, error::AppError};
