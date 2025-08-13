@@ -56,7 +56,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: arkvote:latest
+    image: ccr.ccs.tencentyun.com/qwerdvd/ark-vote:latest
     container_name: arkvote_app
     restart: unless-stopped
     depends_on:
@@ -81,7 +81,7 @@ services:
     command: ["sh", "-c", "for i in $(seq 1 $WORKER_COUNT); do ./ark-vote web-server & done; wait"]
 
   nats-consumer:
-    image: arkvote:latest
+    image: ccr.ccs.tencentyun.com/qwerdvd/ark-vote:latest
     container_name: arkvote_nats_consumer
     restart: unless-stopped
     depends_on:
