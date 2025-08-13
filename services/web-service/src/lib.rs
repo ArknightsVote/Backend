@@ -7,6 +7,7 @@ mod service;
 mod state;
 mod task;
 mod utils;
+mod worker_id;
 
 use async_nats::jetstream;
 use axum::{Json, Router, extract::State, routing::get};
@@ -19,6 +20,7 @@ use share::{
     models::{database::VotingTopic, excel::CharacterInfo},
     snowflake::Snowflake,
 };
+use socket2::{Domain, Socket, Type};
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use utoipa::OpenApi as _;
@@ -32,11 +34,26 @@ use crate::{
     service::TopicService,
     state::{AppState, RedisService},
     task::TaskManager,
+    worker_id::WorkerIdManager,
 };
 
 #[axum::debug_handler]
 pub async fn get_task_stats(State(state): State<Arc<AppState>>) -> Json<task::TaskStats> {
     Json(state.task_manager.get_stats())
+}
+
+fn make_reuseport_listener(addr: SocketAddr) -> eyre::Result<std::net::TcpListener> {
+    let domain = match addr {
+        SocketAddr::V4(_) => Domain::IPV4,
+        SocketAddr::V6(_) => Domain::IPV6,
+    };
+    let socket = Socket::new(domain, Type::STREAM, None)?;
+    socket.set_nonblocking(true)?;
+    socket.set_reuse_address(true)?;
+    socket.set_reuse_port(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+    Ok(socket.into())
 }
 
 pub struct WebService {
@@ -93,7 +110,16 @@ impl WebService {
             }
         }
 
-        let snowflake = Snowflake::new_from_config(&self.config.snowflake);
+        let manager = Arc::new(WorkerIdManager::new(connection.clone(), 1)?);
+        let worker_id = manager.acquire().await?;
+        manager.clone().keep_alive().await;
+        tracing::info!("acquired worker_id: {}", worker_id);
+
+        let snowflake = Snowflake::new(
+            self.config.snowflake.datacenter_id,
+            worker_id,
+            self.config.snowflake.epoch,
+        );
         tracing::debug!(
             "snowflake initialized with config: {:?}",
             &self.config.snowflake
@@ -204,10 +230,12 @@ impl WebService {
             .address()
             .parse::<SocketAddr>()
             .context("invalid bind address")?;
+        tracing::debug!("Parsed bind address: {}", bind_addr);
+
+        let listener = make_reuseport_listener(bind_addr)?;
+        let listener = tokio::net::TcpListener::from_std(listener)?;
 
         tracing::info!("starting web service on {}", bind_addr);
-
-        let listener = tokio::net::TcpListener::bind(bind_addr).await?;
 
         tokio::spawn(async move {
             axum::serve(

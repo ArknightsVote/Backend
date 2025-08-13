@@ -70,13 +70,15 @@ services:
       - "3000:3000"
     environment:
       - APP_ENV=docker
+      - WORKER_COUNT=4
     volumes:
       - ./character_table.json:/app/character_table.json
       - ./docker_config:/app/config
       - ./logs:/app/logs
     networks:
       - arkvote_network
-    command: ["web-server"]
+    # command: ["web-server"]
+    command: ["sh", "-c", "for i in $(seq 1 $WORKER_COUNT); do ./ark-vote web-server & done; wait"]
 
   nats-consumer:
     image: arkvote:latest

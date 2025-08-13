@@ -36,21 +36,21 @@ struct Internals {
 struct SnowflakeInner {
     epoch: u64,
     data_center_id: u8,
-    machine_id: u8,
+    worker_id: u8,
     internals: Mutex<Internals>,
 }
 
 pub struct Snowflake(Arc<SnowflakeInner>);
 
 impl Snowflake {
-    pub fn new(data_center_id: u8, machine_id: u8, epoch: u64) -> Self {
+    pub fn new(data_center_id: u8, worker_id: u8, epoch: u64) -> Self {
         let sequence = 0;
         let last_timestamp = 0;
 
         Snowflake(Arc::new(SnowflakeInner {
             epoch,
             data_center_id,
-            machine_id,
+            worker_id,
             internals: Mutex::new(Internals {
                 last_timestamp,
                 sequence,
@@ -84,7 +84,7 @@ impl Snowflake {
             << (BIT_LEN_SEQUENCE + BIT_LEN_MACHINE_ID + BIT_LEN_DATA_CENTER_ID)
             | (internals.sequence as u64) << (BIT_LEN_MACHINE_ID + BIT_LEN_DATA_CENTER_ID)
             | (self.0.data_center_id as u64) << BIT_LEN_MACHINE_ID
-            | (self.0.machine_id as u64))
+            | (self.0.worker_id as u64))
     }
 }
 
