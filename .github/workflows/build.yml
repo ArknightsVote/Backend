@@ -52,7 +52,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os }}-release
+          name: ${{ matrix.os }}-release
           path: ${{ runner.os == 'Windows' && 'target/release/ark-vote.exe' || 'target/release/ark-vote' }}
 
   docker-build:
