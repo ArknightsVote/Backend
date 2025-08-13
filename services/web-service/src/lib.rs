@@ -212,6 +212,7 @@ impl WebService {
         tracing::debug!("CORS layer initialized");
 
         let app = Router::new()
+            .route("/", get(|| async { "Hello, world!" }))
             .route("/metrics", get(|| async move { metric_handle.render() }))
             .route("/task_stats", get(get_task_stats))
             .merge(api::routes())
