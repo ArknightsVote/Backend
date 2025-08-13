@@ -43,6 +43,9 @@ jobs:
         with:
           make-default: false
 
+      - name: Install dependencies
+        run: cargo fetch
+
       - name: Build with cargo
         run: cargo build --release
 
