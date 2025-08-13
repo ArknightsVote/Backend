@@ -1,35 +1,25 @@
+use futures::FutureExt;
+use serde::Serialize;
 use std::{
     future::Future,
-    pin::Pin,
     panic::AssertUnwindSafe,
+    pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
 };
-use serde::Serialize;
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{Semaphore, mpsc};
 use tracing::error;
-use futures::FutureExt;
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 type Task = Box<dyn FnOnce() -> BoxFuture + Send + 'static>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Default, Debug, Clone, Serialize)]
 pub struct TaskStats {
     pub queued: usize,
     pub running: usize,
     pub completed: usize,
-}
-
-impl Default for TaskStats {
-    fn default() -> Self {
-        Self {
-            queued: 0,
-            running: 0,
-            completed: 0,
-        }
-    }
 }
 
 pub struct TaskManager {
@@ -100,7 +90,10 @@ impl TaskManager {
 
         if let Err(e) = self.sender.send(task) {
             self.queued.fetch_sub(1, Ordering::Relaxed);
-            error!("Failed to enqueue background task (receiver closed): {:?}", e);
+            error!(
+                "Failed to enqueue background task (receiver closed): {:?}",
+                e
+            );
         }
     }
 

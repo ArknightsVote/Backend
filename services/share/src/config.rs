@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use async_nats::jetstream::stream::RetentionPolicy;
+use async_nats::jetstream::stream::{RetentionPolicy, StorageType};
 use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{models::database::VotingTopic, snowflake::SnowflakeConfig};
@@ -83,6 +83,7 @@ pub struct NatsConsumerConfig {
 #[derive(Clone, Debug, Deserialize)]
 pub struct NatsStreamConfig {
     pub name: String,
+    pub storage_type: StorageType,
     pub subjects: Vec<String>,
     pub retention: RetentionPolicy,
     pub max_messages: i64,

@@ -145,6 +145,7 @@ impl NatsService {
                 subjects: stream_config.subjects.clone(),
                 max_messages: stream_config.max_messages,
                 max_messages_per_subject: stream_config.max_messages_per_subject,
+                storage: stream_config.storage_type,
                 ..Default::default()
             })
             .await

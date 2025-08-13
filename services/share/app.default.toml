@@ -106,6 +106,7 @@ subject = "ark-vote.dlq"
 
 [nats.stream_config]
 name = "ark-vote"
+storage_type = "file"
 subjects = [
     "ark-vote.ballot_skip",
     "ark-vote.save_score",

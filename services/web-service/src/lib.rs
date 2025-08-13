@@ -5,11 +5,11 @@ mod constants;
 mod error;
 mod service;
 mod state;
-mod utils;
 mod task;
+mod utils;
 
 use async_nats::jetstream;
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{Json, Router, extract::State, routing::get};
 use axum_prometheus::PrometheusMetricLayer;
 use dashmap::DashMap;
 use eyre::Context;
@@ -30,7 +30,8 @@ use crate::{
     constants::LUA_SCRIPT_GET_FINAL_ORDER,
     error::AppError,
     service::TopicService,
-    state::{AppState, RedisService}, task::TaskManager,
+    state::{AppState, RedisService},
+    task::TaskManager,
 };
 
 #[axum::debug_handler]
