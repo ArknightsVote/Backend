@@ -6,12 +6,14 @@ networks:
 
 services:
   mongodb:
-    image: docker.io/mongo:7.0
+    image: docker.io/mongo:8
     container_name: arkvote_mongodb
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: arkvote
       MONGO_INITDB_ROOT_PASSWORD: arkvote_password
+    ports:
+      - "27017:27017"
     volumes:
       - ./data/mongodb:/data/db
     networks:
@@ -23,10 +25,12 @@ services:
       retries: 5
 
   redis:
-    image: docker.io/redis:7-alpine
+    image: docker.io/redis:8-alpine
     container_name: arkvote_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
     volumes:
       - ./data/redis:/data
     networks:
@@ -38,10 +42,12 @@ services:
       retries: 5
 
   nats:
-    image: docker.io/nats:2.10-alpine
+    image: docker.io/nats:2.11-alpine
     container_name: arkvote_nats
     restart: unless-stopped
     command: "-js -sd /data"
+    ports:
+      - "4222:4222"
     volumes:
       - ./data/nats:/data
     networks:
@@ -57,7 +63,6 @@ services:
       context: .
       dockerfile: Dockerfile
     image: ccr.ccs.tencentyun.com/qwerdvd/ark-vote:latest
-    container_name: arkvote_app
     restart: unless-stopped
     depends_on:
       mongodb:
@@ -71,14 +76,13 @@ services:
     environment:
       - APP_ENV=docker
       - WORKER_COUNT=4
+      - ARK_VOTE_ADMIN_ENABLED=false
     volumes:
       - ./character_table.json:/app/character_table.json
       - ./docker_config:/app/config
       - ./logs:/app/logs
-    networks:
-      - arkvote_network
-    # command: ["web-server"]
-    command: ["sh", "-c", "for i in $(seq 1 $WORKER_COUNT); do ./ark-vote web-server & done; wait"]
+    network_mode: host
+    command: ["web-server"]
 
   nats-consumer:
     image: ccr.ccs.tencentyun.com/qwerdvd/ark-vote:latest

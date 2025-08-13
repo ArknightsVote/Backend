@@ -79,17 +79,16 @@ allow_origin = ["*"]
 allow_methods = ["GET", "POST", "OPTIONS"]
 
 [database]
-redis_url = "redis://redis:6379"
-mongodb_url = "mongodb://arkvote:arkvote_password@mongodb:27017"
+redis_url = "redis://127.0.0.1:6379"
+mongodb_url = "mongodb://arkvote:arkvote_password@127.0.0.1:27017"
 mongodb_database = "ark_vote"
 
 [snowflake]
-worker_id = 1
 datacenter_id = 1
 epoch = 1609459200000
 
 [nats]
-url = "nats:4222"
+url = "nats://127.0.0.1:4222"
 
 [[nats.consumers]]
 name = "ballot_skip"

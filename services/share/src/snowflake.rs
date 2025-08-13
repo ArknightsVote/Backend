@@ -18,7 +18,6 @@ pub enum SnowflakeError {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct SnowflakeConfig {
-    pub worker_id: u8,
     pub datacenter_id: u8,
     pub epoch: u64, // Timestamp in milliseconds
 }
@@ -56,10 +55,6 @@ impl Snowflake {
                 sequence,
             }),
         }))
-    }
-
-    pub fn new_from_config(config: &SnowflakeConfig) -> Self {
-        Self::new(config.datacenter_id, config.worker_id, config.epoch)
     }
 
     pub fn next_id(&self) -> Result<u64, SnowflakeError> {

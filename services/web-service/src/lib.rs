@@ -50,9 +50,12 @@ fn make_reuseport_listener(addr: SocketAddr) -> eyre::Result<std::net::TcpListen
     let socket = Socket::new(domain, Type::STREAM, None)?;
     socket.set_nonblocking(true)?;
     socket.set_reuse_address(true)?;
-    socket.set_reuse_port(true)?;
+    #[cfg(unix)]
+    {
+        socket.set_reuse_port(true)?;
+    }
     socket.bind(&addr.into())?;
-    socket.listen(1024)?;
+    socket.listen(8192)?;
     Ok(socket.into())
 }
 
@@ -110,7 +113,7 @@ impl WebService {
             }
         }
 
-        let manager = Arc::new(WorkerIdManager::new(connection.clone(), 1)?);
+        let manager = Arc::new(WorkerIdManager::new(connection.clone(), 255)?);
         let worker_id = manager.acquire().await?;
         manager.clone().keep_alive().await;
         tracing::info!("acquired worker_id: {}", worker_id);

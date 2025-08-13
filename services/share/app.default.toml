@@ -84,7 +84,6 @@ mongodb_url = "mongodb://127.0.0.1:27017"
 mongodb_database = "ark_vote"
 
 [snowflake]
-worker_id = 1
 datacenter_id = 1
 epoch = 1609459200000
 
