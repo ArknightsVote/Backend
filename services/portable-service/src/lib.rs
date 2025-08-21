@@ -165,7 +165,7 @@ impl PortableService {
             let state = web::Data::new(state);
 
             let cors = Cors::default()
-                .send_wildcard()
+                .allow_any_origin()
                 .allowed_methods(vec!["GET", "POST"])
                 .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
                 .allowed_header(header::CONTENT_TYPE)
