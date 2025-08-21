@@ -248,7 +248,13 @@ pub struct Results1v1MatrixRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
-pub struct Results1v1MatrixResponse(pub HashMap<String, i64>);
+pub struct Results1v1MatrixItem {
+    pub score: i64,
+    pub count: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
+pub struct Results1v1MatrixResponse(pub HashMap<String, Results1v1MatrixItem>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TopicCreateRequest {

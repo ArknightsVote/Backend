@@ -247,6 +247,7 @@ impl BallotProcessor {
         batch_update_scores(
             score_updates,
             &database.redis.batch_score_update_script,
+            &database.redis.batch_record_1v1_script,
             conn,
         )
         .await?;
@@ -328,6 +329,7 @@ async fn calculate_pairwise_multipliers(
 async fn batch_update_scores(
     updates: Vec<((String, i32, i32), i32)>, // ((topic_id, win_id, lose_id), total_multiplier)
     batch_score_update_script: &redis::Script,
+    batch_record_1v1_script: &redis::Script,
     conn: &mut redis::aio::MultiplexedConnection,
 ) -> Result<(), AppError> {
     if updates.is_empty() {
@@ -336,16 +338,31 @@ async fn batch_update_scores(
 
     // 准备参数：topic_id1, win_id1, lose_id1, multiplier1, topic_id2, win_id2, lose_id2, multiplier2, ...
     let mut args = Vec::with_capacity(updates.len() * 4);
+    let mut args2 = Vec::with_capacity(updates.len() * 3);
     for ((topic_id, win_id, lose_id), multiplier) in updates {
-        args.push(topic_id);
+        args.push(topic_id.clone());
         args.push(win_id.to_string());
         args.push(lose_id.to_string());
         args.push(multiplier.to_string());
+
+        args2.push(topic_id.clone());
+        let (min_id, max_id) = if win_id < lose_id {
+            (win_id, lose_id)
+        } else {
+            (lose_id, win_id)
+        };
+        args2.push(min_id.to_string());
+        args2.push(max_id.to_string());
     }
 
     // 执行批量分数更新脚本
     let _results: () = batch_score_update_script
         .arg(&args)
+        .invoke_async(conn)
+        .await?;
+
+    let _results: () = batch_record_1v1_script
+        .arg(&args2)
         .invoke_async(conn)
         .await?;
 

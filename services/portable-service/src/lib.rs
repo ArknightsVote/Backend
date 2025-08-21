@@ -21,8 +21,8 @@ use crate::{
         topic_info_fn, topic_list_active_fn,
     },
     constants::{
-        LUA_SCRIPT_BATCH_IP_COUNTER_SCRIPT, LUA_SCRIPT_BATCH_SCORE_UPDATE_SCRIPT,
-        LUA_SCRIPT_GET_FINAL_ORDER,
+        LUA_SCRIPT_BATCH_IP_COUNTER_SCRIPT, LUA_SCRIPT_BATCH_RECORD_1V1_SCRIPT,
+        LUA_SCRIPT_BATCH_SCORE_UPDATE_SCRIPT, LUA_SCRIPT_GET_FINAL_ORDER,
     },
     proc::BallotProcessor,
     state::{AppDatabase, AppState, RedisService},
@@ -72,6 +72,7 @@ impl PortableService {
 
                 batch_ip_counter_script: redis::Script::new(LUA_SCRIPT_BATCH_IP_COUNTER_SCRIPT),
                 batch_score_update_script: redis::Script::new(LUA_SCRIPT_BATCH_SCORE_UPDATE_SCRIPT),
+                batch_record_1v1_script: redis::Script::new(LUA_SCRIPT_BATCH_RECORD_1V1_SCRIPT),
             },
             mongo_database,
         }))

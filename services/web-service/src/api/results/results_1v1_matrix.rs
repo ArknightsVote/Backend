@@ -3,7 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use axum::{Json, extract::State};
 use redis::AsyncCommands;
 use share::models::api::{
-    ApiData, ApiMsg, ApiResponse, Results1v1MatrixRequest, Results1v1MatrixResponse,
+    ApiData, ApiMsg, ApiResponse, Results1v1MatrixItem, Results1v1MatrixRequest,
+    Results1v1MatrixResponse,
 };
 
 use crate::{AppState, error::AppError};
@@ -48,9 +49,20 @@ pub async fn results_1v1_matrix(
     let target_key = format!("{}:op_matrix", target_topic.id);
     let data: HashMap<String, i64> = conn.hgetall(target_key).await?;
 
+    let mut rsp = HashMap::new();
+    for (key, value) in data {
+        rsp.insert(
+            key,
+            Results1v1MatrixItem {
+                score: value,
+                count: 1,
+            },
+        );
+    }
+
     Ok(Json(ApiResponse {
         status: 0,
-        data: ApiData::Data(Results1v1MatrixResponse(data)),
+        data: ApiData::Data(Results1v1MatrixResponse(rsp)),
         message: ApiMsg::OK,
     }))
 }

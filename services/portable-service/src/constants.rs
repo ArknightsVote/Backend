@@ -73,3 +73,30 @@ end
 
 return 1
 "#;
+
+pub const LUA_SCRIPT_BATCH_RECORD_1V1_SCRIPT: &str = r#"
+-- ARGV: topic_id1, operator1, operator1_1, topic_id2,
+local arg_count = #ARGV
+
+-- 确保参数数量是3的倍数
+if arg_count % 3 ~= 0 then
+    return redis.error_reply("invalid argument count: must be multiple of 3")
+end
+
+for i = 1, arg_count, 3 do
+    local topic_id = ARGV[i]
+    local operator = tonumber(ARGV[i + 1])
+    local operator2 = tonumber(ARGV[i + 2])
+
+    -- 保证 operator < operator2，如果不是就交换
+    if operator > operator2 then
+        operator, operator2 = operator2, operator
+    end
+
+    local op_counter_key = topic_id .. ":op_counter"
+    local key = operator .. ":" .. operator2
+    redis.call("HINCRBY", op_counter_key, key, 1)
+end
+
+return 1
+"#;

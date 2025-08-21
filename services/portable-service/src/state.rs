@@ -17,6 +17,7 @@ pub struct RedisService {
 
     pub batch_ip_counter_script: redis::Script,
     pub batch_score_update_script: redis::Script,
+    pub batch_record_1v1_script: redis::Script,
 }
 
 #[derive(Clone)]
