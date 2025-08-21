@@ -28,7 +28,7 @@ services:
     image: docker.io/redis:8-alpine
     container_name: arkvote_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --appendfsync everysec --no-appendfsync-on-rewrite yes
     ports:
       - "6379:6379"
     volumes:
