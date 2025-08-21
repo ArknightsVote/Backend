@@ -3,7 +3,8 @@ use std::{
     sync::{Arc, atomic::AtomicU8},
 };
 
-use actix_web::{middleware, web};
+use actix_cors::Cors;
+use actix_web::{http::header, middleware, web};
 use dashmap::DashMap;
 use eyre::Context;
 use mongodb::bson::doc;
@@ -163,6 +164,13 @@ impl PortableService {
 
             let state = web::Data::new(state);
 
+            let cors = Cors::default()
+                .send_wildcard()
+                .allowed_methods(vec!["GET", "POST"])
+                .allowed_headers(vec![header::AUTHORIZATION, header::ACCEPT])
+                .allowed_header(header::CONTENT_TYPE)
+                .max_age(3600);
+
             actix_web::App::new()
                 .route("/", actix_web::web::get().to(|| async { "Hello, Actix!" }))
                 .service(ballot_create_fn)
@@ -177,6 +185,7 @@ impl PortableService {
                 .service(audit_topic_fn)
                 .service(audit_topics_list_fn)
                 .app_data(state)
+                .wrap(cors)
                 .wrap(middleware::Compress::default())
                 .wrap(middleware::NormalizePath::trim())
                 .wrap(middleware::Logger::default())
