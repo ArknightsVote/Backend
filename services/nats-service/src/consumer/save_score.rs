@@ -216,6 +216,7 @@ async fn process_save_score_messages(
         }
 
         if ballot_groups.is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             continue;
         }
 

@@ -176,13 +176,13 @@ impl WebService {
         };
         tracing::debug!("AppState initialized");
 
-        // let sentry_layer = ServiceBuilder::new()
-        //     .layer(NewSentryLayer::new_from_top())
-        //     .layer(SentryHttpLayer::new().enable_transaction());
-        // tracing::debug!("Sentry layer initialized");
+        let sentry_layer = ServiceBuilder::new()
+            .layer(NewSentryLayer::new_from_top())
+            .layer(SentryHttpLayer::new().enable_transaction());
+        tracing::debug!("Sentry layer initialized");
 
-        // let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
-        // tracing::debug!("Prometheus metrics layer initialized");
+        let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
+        tracing::debug!("Prometheus metrics layer initialized");
 
         let cors_layer = {
             let allow_methods = self
@@ -213,19 +213,19 @@ impl WebService {
 
         let app = Router::new()
             .route("/", get(|| async { "Hello, world!" }))
-            // .route("/metrics", get(|| async move { metric_handle.render() }))
+            .route("/metrics", get(|| async move { metric_handle.render() }))
             .route("/task_stats", get(get_task_stats))
             .merge(api::routes())
             .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()))
             .merge(Scalar::with_url("/scalar", ApiDoc::openapi()))
             .with_state(Arc::new(state))
-            .layer(cors_layer);
-            // .layer(sentry_layer)
-            // .layer((
-            //     TraceLayer::new_for_http(),
-            //     TimeoutLayer::new(Duration::from_secs(60)),
-            // ))
-            // .layer(prometheus_layer);
+            .layer(cors_layer)
+            .layer(sentry_layer)
+            .layer((
+                TraceLayer::new_for_http(),
+                TimeoutLayer::new(Duration::from_secs(60)),
+            ))
+            .layer(prometheus_layer);
         tracing::debug!("Router initialized");
 
         let bind_addr = self

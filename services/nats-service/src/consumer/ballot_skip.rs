@@ -104,6 +104,7 @@ async fn process_ballot_skip(
         }
 
         if batch_messages.is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             continue;
         }
 

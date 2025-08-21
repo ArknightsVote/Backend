@@ -5,7 +5,11 @@ use futures::StreamExt as _;
 use serde::{Deserialize, Serialize};
 use share::config::AppConfig;
 
-use crate::{constants::CONSUMER_RETRY_DELAY, db::AppDatabase, error::AppError};
+use crate::{
+    constants::{CONSUMER_BATCH_SIZE, CONSUMER_RETRY_DELAY},
+    db::AppDatabase,
+    error::AppError,
+};
 
 use super::normalize_subject;
 
@@ -71,11 +75,28 @@ async fn process_dead_letter_queue(
     >,
     database: &AppDatabase,
 ) -> Result<(), AppError> {
-    let mut messages = consumer.fetch().max_messages(10).messages().await?;
+    let mut messages_groups = Vec::with_capacity(CONSUMER_BATCH_SIZE);
 
-    while let Some(message) = messages.next().await {
-        match message {
-            Ok(msg) => match process_dead_letter_message(&msg.payload, database).await {
+    loop {
+        let mut messages = consumer.fetch().max_messages(10).messages().await?;
+
+        while let Some(message) = messages.next().await {
+            match message {
+                Ok(msg) => messages_groups.push(msg),
+                Err(e) => {
+                    tracing::error!("error getting DLQ message: {}", e);
+                    continue;
+                }
+            }
+        }
+
+        if messages_groups.is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            continue;
+        }
+
+        for msg in messages_groups.drain(..) {
+            match process_dead_letter_message(&msg.payload, database).await {
                 Ok(_) => {
                     tracing::info!("successfully processed DLQ message");
                     if let Err(e) = msg.double_ack().await {
@@ -91,15 +112,9 @@ async fn process_dead_letter_queue(
                         tracing::error!("failed to acknowledge failed DLQ message: {}", ack_err);
                     }
                 }
-            },
-            Err(e) => {
-                tracing::error!("error getting DLQ message: {}", e);
-                continue;
             }
         }
     }
-
-    Ok(())
 }
 
 async fn process_dead_letter_message(

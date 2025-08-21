@@ -18,8 +18,8 @@ pub struct AdminCli {
         value_name = "BOOL",
         num_args(0..=1),
         action=clap::ArgAction::Set,
-        default_missing_value = "true",
-        default_value_t = true
+        default_missing_value = "false",
+        default_value_t = false
     )]
     enabled: bool,
     #[clap(long = "admin.address", env = "ARK_VOTE_ADMIN_ADDRESS")]

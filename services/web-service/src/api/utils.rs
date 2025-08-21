@@ -7,8 +7,8 @@ pub async fn publish_and_ack(
     subject: &'static str,
     data: Vec<u8>,
 ) -> Result<(), AppError> {
-    let publish_ack = jetstream.publish(subject, data.into()).await?;
-    publish_ack.await?;
+    let _publish_ack = jetstream.publish(subject, data.into()).await?;
+    // publish_ack.await?;
     Ok(())
 }
 
