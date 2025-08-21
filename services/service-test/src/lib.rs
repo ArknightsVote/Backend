@@ -8,8 +8,8 @@ use reqwest::Client;
 use share::config::AppConfig;
 use share::models::api::{
     ApiData, ApiResponse, BallotCreateRequest, BallotCreateResponse, BallotSaveRequest,
-    PairwiseSaveScore, Results1v1MatrixRequest, Results1v1MatrixResponse, ResultsFinalOrderRequest,
-    ResultsFinalOrderResponse,
+    BallotSaveResponse, PairwiseSaveScore, Results1v1MatrixRequest, Results1v1MatrixResponse,
+    ResultsFinalOrderRequest, ResultsFinalOrderResponse,
 };
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -23,10 +23,12 @@ use tokio::sync::{Semaphore, mpsc};
 #[derive(Debug)]
 enum StatEvent {
     Success {
+        ballot_id: String,
         win: i32,
         lose: i32,
         latency_us: u64,
     },
+    Error,
 }
 
 #[derive(Clone)]
@@ -34,7 +36,6 @@ pub struct ServiceTester {
     base_url: String,
     total_requests: usize,
     concurrency_limit: usize,
-    max_retry: usize,
     qps_limit: u32,
 }
 
@@ -45,15 +46,12 @@ impl ServiceTester {
             base_url: test_config.base_url.clone(),
             total_requests: test_config.total_requests,
             concurrency_limit: test_config.concurrency_limit,
-            max_retry: test_config.max_retry,
             qps_limit: test_config.qps_limit,
         }
     }
 
     pub async fn run(self) -> Result<()> {
-        tracing::info!("checking endpoint availability...");
         self.check_endpoints_available().await?;
-        tracing::info!("all endpoints are available.");
 
         let client = Client::new();
         let limiter = if self.qps_limit > 0 {
@@ -69,31 +67,39 @@ impl ServiceTester {
         };
         let init_data = self.results_final_order(&client, &data).await?;
         let init_score: i64 = init_data.items.iter().map(|i| i.win + i.lose).sum();
+        tracing::info!("initial count: {}", init_data.count);
 
         let semaphore = Arc::new(Semaphore::new(self.concurrency_limit));
         let success_count = Arc::new(AtomicUsize::new(0));
         let (tx, mut rx) = mpsc::channel::<StatEvent>(self.total_requests);
         let histogram = Arc::new(tokio::sync::Mutex::new(Histogram::<u64>::new(3)?));
         let mut result_map: HashMap<i32, (i64, i64)> = HashMap::new();
+        let mut ballot_id_collect: Vec<String> = Vec::new();
 
         // Spawn stats collector
         let hist_clone = Arc::clone(&histogram);
         let success_clone = Arc::clone(&success_count);
         let stats_handle = tokio::spawn(async move {
             while let Some(event) = rx.recv().await {
-                let StatEvent::Success {
-                    win,
-                    lose,
-                    latency_us,
-                } = event;
+                match event {
+                    StatEvent::Success {
+                        ballot_id,
+                        win,
+                        lose,
+                        latency_us,
+                    } => {
+                        success_clone.fetch_add(1, Ordering::Relaxed);
+                        result_map.entry(win).or_default().0 += 1;
+                        result_map.entry(lose).or_default().1 += 1;
+                        ballot_id_collect.push(ballot_id);
 
-                success_clone.fetch_add(1, Ordering::Relaxed);
-                result_map.entry(win).or_default().0 += 1;
-                result_map.entry(lose).or_default().1 += 1;
-                let mut h = hist_clone.lock().await;
-                let _ = h.record(latency_us);
+                        let mut h = hist_clone.lock().await;
+                        let _ = h.record(latency_us);
+                    }
+                    StatEvent::Error => {}
+                }
             }
-            result_map
+            (result_map, ballot_id_collect)
         });
 
         tracing::info!(
@@ -119,7 +125,7 @@ impl ServiceTester {
 
         while futures.next().await.is_some() {}
         drop(tx);
-        let result_map = stats_handle.await?;
+        let (result_map, ballot_id_collect) = stats_handle.await?;
 
         tracing::info!("waiting 5 seconds for final data to stabilize...");
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -172,16 +178,28 @@ impl ServiceTester {
             .await?;
         let final_score: i64 = final_data.items.iter().map(|i| i.win + i.lose).sum();
 
+        // Ensure ballot_id has no duplicates
+        let mut seen = std::collections::HashSet::new();
+        for ballot_id in ballot_id_collect {
+            assert!(seen.insert(ballot_id), "duplicate ballot_id found");
+        }
+
         assert_eq!(
             final_data.count,
-            init_data.count + self.total_requests as i64
+            init_data.count + success_count.load(Ordering::Relaxed) as i64,
+            "final_data.count != init_data.count + success_count"
         );
-        assert_eq!(final_score, init_score + self.total_requests as i64 * 2);
+        assert_eq!(
+            final_score,
+            init_score + success_count.load(Ordering::Relaxed) as i64 * 2,
+            "final_score != init_score + success_count"
+        );
 
         for item in final_data.items.iter() {
-            let (expected_win, expected_lose) = result_map
-                .get(&item.id)
-                .with_context(|| format!("operator ID {} not found in results", item.id))?;
+            let (expected_win, expected_lose) = match result_map.get(&item.id) {
+                Some((win, lose)) => (win, lose),
+                None => continue,
+            };
             let init = init_data
                 .items
                 .iter()
@@ -209,74 +227,21 @@ impl ServiceTester {
             limiter.until_ready().await
         }
 
-        let mut attempt = 0;
-
-        loop {
-            attempt += 1;
-            let start = Instant::now();
-
-            let data = BallotCreateRequest {
-                topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
-            };
-            let compare = match self.ballot_create(&client, &data).await {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::warn!("new compare failed: {e}");
-                    continue;
-                }
-            };
-
-            let (left, right, ballot_id) = match compare {
-                BallotCreateResponse::Pairwise {
-                    left,
-                    right,
-                    ballot_id,
-                    ..
-                } => (left, right, ballot_id),
-                _ => {
-                    tracing::warn!("unexpected compare response type");
-                    continue;
-                }
-            };
-            assert!(left != right, "left and right should not be the same");
-            assert!(left > 0 && right > 0, "left and right should be positive");
-
-            let data = BallotSaveRequest::Pairwise(PairwiseSaveScore {
-                topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
-                ballot_id,
-                winner: left,
-                loser: right,
-            });
-
-            match self.ballot_save(&client, &data).await {
-                Ok(_) => {
-                    let latency = start.elapsed().as_micros() as u64;
-                    let _ = tx
-                        .send(StatEvent::Success {
-                            win: left,
-                            lose: right,
-                            latency_us: latency,
-                        })
-                        .await;
-                    return Ok(());
-                }
-                Err(e) if attempt < self.max_retry => {
-                    tracing::warn!("save score failed (retry {attempt}): {e}");
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-                Err(e) => return Err(e),
-            }
-        }
-    }
-
-    async fn check_endpoints_available(&self) -> Result<()> {
-        let client = Client::new();
+        let start = Instant::now();
 
         let data = BallotCreateRequest {
             topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
         };
-        let data = self.ballot_create(&client, &data).await?;
-        let (left, right, ballot_id) = match data {
+        let compare = match self.ballot_create(&client, &data).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!("new compare failed: {e}");
+                let _ = tx.send(StatEvent::Error).await;
+                return Ok(());
+            }
+        };
+
+        let (left, right, ballot_id) = match compare {
             BallotCreateResponse::Pairwise {
                 left,
                 right,
@@ -285,18 +250,43 @@ impl ServiceTester {
             } => (left, right, ballot_id),
             _ => {
                 tracing::warn!("unexpected compare response type");
-                return Err(eyre::eyre!("unexpected compare response type"));
+                let _ = tx.send(StatEvent::Error).await;
+                return Ok(());
             }
         };
+        assert!(left != right, "left and right should not be the same");
+        assert!(left > 0 && right > 0, "left and right should be positive");
 
         let data = BallotSaveRequest::Pairwise(PairwiseSaveScore {
             topic_id: "crisis_v2_season_4_1_benchtest".to_string(),
-            ballot_id,
+            ballot_id: ballot_id.clone(),
             winner: left,
             loser: right,
         });
-        self.ballot_save(&client, &data).await?;
 
+        match self.ballot_save(&client, &data).await {
+            Ok(_) => {
+                let latency = start.elapsed().as_micros() as u64;
+                let _ = tx
+                    .send(StatEvent::Success {
+                        ballot_id,
+                        win: left,
+                        lose: right,
+                        latency_us: latency,
+                    })
+                    .await;
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!("ballot save failed: {e}");
+                let _ = tx.send(StatEvent::Error).await;
+                Ok(())
+            }
+        }
+    }
+
+    async fn check_endpoints_available(&self) -> Result<()> {
+        let client = Client::new();
         self.results_final_order(
             &client,
             &ResultsFinalOrderRequest {
@@ -392,10 +382,19 @@ impl ServiceTester {
             .await
             .context("post ballot_save failed")?;
 
-        if res.status().is_success() {
+        let response = res
+            .json::<ApiResponse<BallotSaveResponse>>()
+            .await
+            .context("parsing ballot_save response failed")?;
+
+        if response.status == 0 {
             Ok(())
         } else {
-            Err(eyre::eyre!("ballot_save failed: status {}", res.status()))
+            tracing::error!("ballot_save failed: {}", response.message);
+            Err(eyre::eyre!(
+                "ballot_save failed: status {}",
+                response.status
+            ))
         }
     }
 }

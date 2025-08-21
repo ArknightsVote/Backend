@@ -27,6 +27,9 @@ pub enum ApiMsg {
     UnsupportedTopicType,
 
     BenchBallotNotFound,
+    BallotNotFound,
+    InvalidBallotCode(String),
+    EndpointForbidden,
 }
 
 impl fmt::Display for ApiMsg {
@@ -54,6 +57,9 @@ impl fmt::Display for ApiMsg {
             ApiMsg::UnsupportedTopicType => write!(f, "Unsupported topic type"),
 
             ApiMsg::BenchBallotNotFound => write!(f, "Bench ballot not found"),
+            ApiMsg::BallotNotFound => write!(f, "Ballot not found"),
+            ApiMsg::InvalidBallotCode(msg) => write!(f, "{}", msg),
+            ApiMsg::EndpointForbidden => write!(f, "Endpoint forbidden"),
         }
     }
 }
@@ -196,6 +202,15 @@ impl BallotSaveRequest {
             BallotSaveRequest::Setwise(data) => &data.topic_id,
             BallotSaveRequest::Groupwise(data) => &data.topic_id,
             BallotSaveRequest::Plurality(data) => &data.topic_id,
+        }
+    }
+
+    pub fn ballot_id(&self) -> &String {
+        match self {
+            BallotSaveRequest::Pairwise(data) => &data.ballot_id,
+            BallotSaveRequest::Setwise(data) => &data.ballot_id,
+            BallotSaveRequest::Groupwise(data) => &data.ballot_id,
+            BallotSaveRequest::Plurality(data) => &data.ballot_id,
         }
     }
 }

@@ -41,6 +41,7 @@ pub enum Commands {
     WebServer,
     NatsConsumer,
     ServiceTest,
+    PortableServer,
 }
 
 impl fmt::Display for Commands {
@@ -49,6 +50,7 @@ impl fmt::Display for Commands {
             Commands::WebServer => write!(f, "web-server"),
             Commands::NatsConsumer => write!(f, "nats-consumer"),
             Commands::ServiceTest => write!(f, "service-test"),
+            Commands::PortableServer => write!(f, "portable-server"),
         }
     }
 }
@@ -106,6 +108,13 @@ impl Cli {
                 tracing::info!("starting nats consumer");
 
                 nats_service::NatsService::new(config)
+                    .run(shutdown_rx)
+                    .await
+            }
+            Some(Commands::PortableServer) => {
+                tracing::info!("starting portable server");
+
+                portable_service::PortableService::new(config)
                     .run(shutdown_rx)
                     .await
             }

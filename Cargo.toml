@@ -10,6 +10,7 @@ members = [
     "services/service-test",
     "services/share",
     "services/web-service",
+    "services/portable-service"
 ]
 resolver = "2"
 
@@ -22,6 +23,7 @@ nats-service = { path = "services/nats-service" }
 service-test = { path = "services/service-test" }
 share = { path = "services/share" }
 web-service = { path = "services/web-service" }
+portable-service = { path = "services/portable-service" }
 
 tokio = { version = "1.47.1", features = ["full"] }
 reqwest = { version = "0.12.23", features = ["json"] }
@@ -56,7 +58,7 @@ mongodb = "3.2.3"
 governor = "0.10.1"
 hdrhistogram = "7.5.4"
 sentry = { version = "0.42.0", features = ["tower", "tower-http", "tracing"] }
-axum-prometheus = "0.8.0"
+axum-prometheus = "0.9.0"
 
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
@@ -78,6 +80,7 @@ nats-service.workspace = true
 service-test.workspace = true
 share.workspace = true
 web-service.workspace = true
+portable-service.workspace = true
 
 tokio.workspace = true
 clap = { version = "4.5.45", features = ["cargo", "derive", "env"] }
@@ -99,6 +102,7 @@ git-testament = "0.2.6"
 tracing.workspace = true
 
 mimalloc = "0.1.47"
+moka = { version = "0.12.10", features = ["future"] }
 
 # form_urlencoded = "1.2.1"
 # libflate = "2.1.0"

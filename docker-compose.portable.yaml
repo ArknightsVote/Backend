@@ -1,0 +1,65 @@
+version: '3.8'
+
+networks:
+  arkvote_network:
+    driver: bridge
+
+services:
+  mongodb:
+    image: docker.io/mongo:8
+    container_name: arkvote_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: arkvote
+      MONGO_INITDB_ROOT_PASSWORD: arkvote_password
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongodb:/data/db
+    networks:
+      - arkvote_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/redis:8-alpine
+    container_name: arkvote_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec --no-appendfsync-on-rewrite yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - arkvote_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ark-vote:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ccr.ccs.tencentyun.com/qwerdvd/ark-vote:latest
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      - APP_ENV=docker
+      - ARK_VOTE_ADMIN_ENABLED=false
+    volumes:
+      - ./character_table.json:/app/character_table.json
+      - ./docker_config:/app/config
+      - ./logs:/app/logs
+    network_mode: host
+    command: ["portable-server"]
