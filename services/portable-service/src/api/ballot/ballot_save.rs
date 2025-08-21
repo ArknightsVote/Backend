@@ -4,26 +4,7 @@ use share::models::{
     database::{Ballot, BallotInfo, PairwiseBallot},
 };
 
-use crate::{AppState, error::AppError};
-
-fn parse_ballot_info(info: &str) -> Result<(i32, i32), AppError> {
-    let parts: Vec<&str> = info.split(',').collect();
-    if parts.len() != 2 {
-        return Err(AppError::InvalidBallotFormat(
-            "expected format: left,right".to_string(),
-        ));
-    }
-
-    let left = parts[0].parse().map_err(|_| {
-        AppError::InvalidBallotFormat("left part is not a valid integer".to_string())
-    })?;
-
-    let right = parts[1].parse().map_err(|_| {
-        AppError::InvalidBallotFormat("right part is not a valid integer".to_string())
-    })?;
-
-    Ok((left, right))
-}
+use crate::AppState;
 
 #[post("/ballot/save")]
 pub async fn ballot_save_fn(
@@ -85,7 +66,8 @@ pub async fn ballot_save_fn(
     };
 
     let ballot_key = format!("{}:ballot:{}", req.topic_id(), req.ballot_id());
-    let store_value = match state.ballot_cache_store.remove(&ballot_key) {
+    let removed = { state.ballot_cache_store.remove(&ballot_key) };
+    let store_value = match removed {
         Some((_, value)) => value,
         None => {
             tracing::error!("Ballot not found in cache: {}", ballot_key);
@@ -129,10 +111,11 @@ pub async fn ballot_save_fn(
                 }));
             }
 
-            let (ballot_left, ballot_right) = parse_ballot_info(&store_value).map_err(|e| {
-                tracing::error!("Failed to parse ballot info: {}", e);
-                AppError::InvalidBallotFormat(e.to_string())
-            })?;
+            // let (ballot_left, ballot_right) = parse_ballot_info(&store_value).map_err(|e| {
+            //     tracing::error!("Failed to parse ballot info: {}", e);
+            //     AppError::InvalidBallotFormat(e.to_string())
+            // })?;
+            let (ballot_left, ballot_right) = (store_value.0, store_value.1);
 
             let valid_ids = [ballot_left, ballot_right];
             if !valid_ids.contains(&winner) || !valid_ids.contains(&loser) {

@@ -79,16 +79,10 @@ pub async fn ballot_create_fn(
             let random_string = generate_random_string(BALLOT_CODE_RANDOM_LENGTH);
             let ballot_id = format!("{id}-{random_string}");
 
-            // let mut conn = state.database.redis.connection.clone();
             let ballot_key = format!("{topic_id}:ballot:{ballot_id}");
-            let ballot_value = format!("{left},{right}");
-            // let _: () = conn
-            //     .set_ex(&ballot_key, &ballot_value, 86400)
-            //     .await
-            //     .unwrap(); // 24 hours expiration
 
             {
-                state.ballot_cache_store.insert(ballot_key, ballot_value);
+                state.ballot_cache_store.insert(ballot_key, (left, right));
             }
 
             let rsp = BallotCreateResponse::Pairwise {

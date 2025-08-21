@@ -33,6 +33,6 @@ pub struct AppState {
     pub character_portraits: HashMap<i32, CharacterPortrait>,
 
     pub topic_service: Arc<TopicService>,
-    pub ballot_cache_store: Arc<DashMap<String, String>>,
+    pub ballot_cache_store: Arc<DashMap<String, (i32, i32)>>,
     pub ballot_processor: Arc<BallotProcessor>,
 }

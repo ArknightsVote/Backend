@@ -19,8 +19,6 @@ pub enum AppError {
     MissingCharacterTableJson,
     #[error("reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
-    #[error("invalid ballot format: {0}")]
-    InvalidBallotFormat(String),
 }
 
 impl ResponseError for AppError {}
