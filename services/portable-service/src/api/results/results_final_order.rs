@@ -125,12 +125,6 @@ pub async fn results_final_order_fn(
     let operators_info = generate_operators_info(&candidate_pool, &state.character_infos);
     let num_operators = operators_info.num_operators;
 
-    tracing::debug!(
-        "Generating final order for topic {} with {} operators",
-        req.topic_id,
-        num_operators
-    );
-
     let mut conn = state.database.redis.connection.clone();
 
     let (operator_values, total_valid_ballots): (Vec<Option<String>>, Option<i64>) = match state
@@ -152,12 +146,6 @@ pub async fn results_final_order_fn(
             }));
         }
     };
-
-    tracing::debug!(
-        "Final order data for topic {}: {:?}",
-        req.topic_id,
-        operator_values
-    );
 
     let (win_counts, lose_counts) = parse_operator_counts(&operator_values, num_operators);
 

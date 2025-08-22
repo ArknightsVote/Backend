@@ -1,13 +1,16 @@
 use std::{
     net::SocketAddr,
     sync::{Arc, atomic::AtomicU8},
+    time::Duration,
 };
 
 use actix_cors::Cors;
 use actix_web::{http::header, middleware, web};
-use dashmap::DashMap;
+use actix_web_prom::PrometheusMetricsBuilder;
 use eyre::Context;
+use moka::future::Cache;
 use mongodb::bson::doc;
+use once_cell::sync::Lazy;
 use share::{
     config::AppConfig,
     models::{database::VotingTopic, excel::CharacterInfo},
@@ -39,6 +42,11 @@ mod utils;
 
 static WORKER_COUNTER: AtomicU8 = AtomicU8::new(0);
 
+pub(crate) fn registry() -> &'static prometheus::Registry {
+    static REG: Lazy<prometheus::Registry> = Lazy::new(prometheus::Registry::new);
+    &REG
+}
+
 pub struct PortableService {
     config: Arc<AppConfig>,
 }
@@ -50,7 +58,7 @@ impl PortableService {
         }
     }
 
-    async fn setup_database(config: &AppConfig) -> eyre::Result<Arc<AppDatabase>> {
+    async fn setup_database(config: &AppConfig) -> eyre::Result<AppDatabase> {
         let database_config = &config.database;
 
         let redis_client = redis::Client::open(&*database_config.redis_url)
@@ -63,7 +71,7 @@ impl PortableService {
 
         let mongo_database = mongodb_client.database(&database_config.mongodb_database);
 
-        Ok(Arc::new(AppDatabase {
+        Ok(AppDatabase {
             redis: RedisService {
                 client: redis_client,
                 connection,
@@ -75,7 +83,7 @@ impl PortableService {
                 batch_record_1v1_script: redis::Script::new(LUA_SCRIPT_BATCH_RECORD_1V1_SCRIPT),
             },
             mongo_database,
-        }))
+        })
     }
 
     pub async fn run(self, _shutdown_rx: share::signal::ShutdownRx) -> eyre::Result<()> {
@@ -134,7 +142,9 @@ impl PortableService {
             Arc::new(BallotProcessor::new(database.clone(), self.config.clone()).await);
         tracing::debug!("BallotProcessor initialized");
 
-        let ballot_store = Arc::new(DashMap::new());
+        let ballot_cache_store = Cache::builder()
+            .time_to_live(Duration::from_secs(24 * 3600))
+            .build_with_hasher(ahash::RandomState::default());
         tracing::debug!("Ballot store initialized");
 
         let bind_addr = self
@@ -144,6 +154,12 @@ impl PortableService {
             .parse::<SocketAddr>()
             .context("invalid bind address")?;
         tracing::debug!("Parsed bind address: {}", bind_addr);
+
+        let prometheus = PrometheusMetricsBuilder::new("api")
+            .registry(registry().clone())
+            .endpoint("/metrics")
+            .build()
+            .unwrap();
 
         actix_web::HttpServer::new(move || {
             let worker_id = WORKER_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -159,7 +175,7 @@ impl PortableService {
                 character_infos: character_infos.clone(),
                 character_portraits: character_portraits.clone(),
                 topic_service: topic_service.clone(),
-                ballot_cache_store: ballot_store.clone(),
+                ballot_cache_store: ballot_cache_store.clone(),
                 ballot_processor: ballot_processor.clone(),
             };
 
@@ -173,7 +189,8 @@ impl PortableService {
                 .max_age(3600);
 
             actix_web::App::new()
-                .route("/", actix_web::web::get().to(|| async { "Hello, Actix!" }))
+                .route("/", actix_web::web::get().to(|| async { "Hello, World!" }))
+                .wrap(prometheus.clone())
                 .service(ballot_create_fn)
                 .service(ballot_save_fn)
                 .service(ballot_skip_fn)

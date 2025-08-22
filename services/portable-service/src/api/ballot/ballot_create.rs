@@ -55,10 +55,10 @@ pub async fn ballot_create_fn(
             }));
         }
     };
-    let topic_id = topic.id;
+
     let candidate_pool = match state
         .topic_service
-        .get_candidate_pool(&topic_id, &state.character_infos)
+        .get_candidate_pool(&topic.id, &state.character_infos)
         .await
     {
         Some(pool) => pool,
@@ -79,14 +79,15 @@ pub async fn ballot_create_fn(
             let random_string = generate_random_string(BALLOT_CODE_RANDOM_LENGTH);
             let ballot_id = format!("{id}-{random_string}");
 
-            let ballot_key = format!("{topic_id}:ballot:{ballot_id}");
+            let ballot_key = format!("{}:ballot:{ballot_id}", topic.id);
 
-            {
-                state.ballot_cache_store.insert(ballot_key, (left, right));
-            }
+            state
+                .ballot_cache_store
+                .insert(ballot_key, (left, right))
+                .await;
 
             let rsp = BallotCreateResponse::Pairwise {
-                topic_id,
+                topic_id: topic.id,
                 ballot_id,
                 left,
                 right,

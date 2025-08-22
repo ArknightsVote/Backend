@@ -33,11 +33,10 @@ pub async fn ballot_skip_fn(
         }
     };
 
-    {
-        state
-            .ballot_cache_store
-            .remove(&format!("{}:ballot:{}", req.topic_id, req.ballot_id));
-    }
+    state
+        .ballot_cache_store
+        .remove(&format!("{}:ballot:{}", req.topic_id, req.ballot_id))
+        .await;
 
     Ok(web::Json(ApiResponse {
         status: 200,

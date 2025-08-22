@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use dashmap::DashMap;
+use moka::future::Cache;
 use share::{
     models::{api::CharacterPortrait, excel::CharacterInfo},
     snowflake::Snowflake,
@@ -27,13 +27,13 @@ pub struct AppDatabase {
 }
 
 pub struct AppState {
-    pub database: Arc<AppDatabase>,
+    pub database: AppDatabase,
     pub snowflake: Snowflake,
 
     pub character_infos: Vec<CharacterInfo>,
     pub character_portraits: HashMap<i32, CharacterPortrait>,
 
     pub topic_service: Arc<TopicService>,
-    pub ballot_cache_store: Arc<DashMap<String, (i32, i32)>>,
+    pub ballot_cache_store: Cache<String, (i32, i32), ahash::RandomState>,
     pub ballot_processor: Arc<BallotProcessor>,
 }

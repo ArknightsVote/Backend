@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, Responder, post, web};
+use actix_web::{HttpRequest, Responder, dev::ConnectionInfo, post, web};
 use share::models::{
     api::{ApiData, ApiMsg, ApiResponse, BallotSaveRequest, BallotSaveResponse, PairwiseSaveScore},
     database::{Ballot, BallotInfo, PairwiseBallot},
@@ -9,6 +9,7 @@ use crate::AppState;
 #[post("/ballot/save")]
 pub async fn ballot_save_fn(
     state: web::Data<AppState>,
+    conn: ConnectionInfo,
     req2: HttpRequest,
     web::Json(req): web::Json<BallotSaveRequest>,
 ) -> actix_web::Result<impl Responder> {
@@ -66,9 +67,8 @@ pub async fn ballot_save_fn(
     };
 
     let ballot_key = format!("{}:ballot:{}", req.topic_id(), req.ballot_id());
-    let removed = { state.ballot_cache_store.remove(&ballot_key) };
-    let store_value = match removed {
-        Some((_, value)) => value,
+    let store_value = match state.ballot_cache_store.remove(&ballot_key).await {
+        Some(v) => v,
         None => {
             tracing::error!("Ballot not found in cache: {}", ballot_key);
             return Ok(web::Json(ApiResponse {
@@ -79,10 +79,7 @@ pub async fn ballot_save_fn(
         }
     };
 
-    let realip_remote_addr = match req2.connection_info().realip_remote_addr() {
-        Some(addr) => addr.to_owned(),
-        None => "unknown".into(),
-    };
+    let realip_remote_addr = conn.realip_remote_addr().unwrap_or("unknown").to_string();
 
     let user_agent = req2
         .headers()
@@ -111,10 +108,6 @@ pub async fn ballot_save_fn(
                 }));
             }
 
-            // let (ballot_left, ballot_right) = parse_ballot_info(&store_value).map_err(|e| {
-            //     tracing::error!("Failed to parse ballot info: {}", e);
-            //     AppError::InvalidBallotFormat(e.to_string())
-            // })?;
             let (ballot_left, ballot_right) = (store_value.0, store_value.1);
 
             let valid_ids = [ballot_left, ballot_right];

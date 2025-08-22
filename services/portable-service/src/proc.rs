@@ -7,6 +7,11 @@ use std::{
 };
 
 use crossbeam_channel::{Receiver, Sender, unbounded};
+use once_cell::sync::Lazy;
+use prometheus::{
+    Histogram, HistogramOpts, IntCounter, IntCounterVec, opts,
+    register_int_counter_vec_with_registry,
+};
 use share::{
     config::{AppConfig, VoteConfig},
     models::database::{
@@ -14,7 +19,115 @@ use share::{
     },
 };
 
-use crate::{error::AppError, state::AppDatabase};
+use crate::{error::AppError, registry, state::AppDatabase};
+use prometheus::{IntGaugeVec, register_int_gauge_vec_with_registry};
+
+const BUCKET_START: f64 = 0.002;
+const BUCKET_FACTOR: f64 = 2.0;
+const BUCKET_COUNT: usize = 10;
+
+enum ProcessingStatsEnum {
+    TotalProcessed,
+    SuccessfulBatches,
+    FailedBatches,
+}
+
+impl ProcessingStatsEnum {
+    const LABEL: &'static str = "processing_stats";
+
+    #[inline]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::TotalProcessed => "total_processed",
+            Self::SuccessfulBatches => "successful_batches",
+            Self::FailedBatches => "failed_batches",
+        }
+    }
+}
+
+fn processing_stats_total(label: ProcessingStatsEnum) -> IntCounter {
+    static METRIC: Lazy<IntCounterVec> = Lazy::new(|| {
+        register_int_counter_vec_with_registry!(
+            opts!(
+                "processing_stats_total",
+                "ProcessingStats counters for total_processed, successful_batches, failed_batches",
+            ),
+            &[ProcessingStatsEnum::LABEL], // type: "total_processed", "successful_batches", "failed_batches"
+            registry()
+        )
+        .unwrap()
+    });
+
+    METRIC.with_label_values(&[label.label()])
+}
+
+fn set_pending_processing_stats(p: usize, s: usize, g: usize, pl: usize) {
+    static METRIC: Lazy<IntGaugeVec> = Lazy::new(|| {
+        register_int_gauge_vec_with_registry!(
+            opts!(
+                "processing_stats_pending",
+                "ProcessingStats gauges for pending pairwise, setwise, groupwise, plurality ballots",
+            ),
+            &[ProcessingStatsEnum::LABEL],
+            registry()
+        )
+        .unwrap()
+    });
+
+    METRIC.with_label_values(&["pairwise"]).set(p as i64);
+    METRIC.with_label_values(&["setwise"]).set(s as i64);
+    METRIC.with_label_values(&["groupwise"]).set(g as i64);
+    METRIC.with_label_values(&["plurality"]).set(pl as i64);
+}
+
+fn batch_process_time() -> &'static Histogram {
+    static PROCESSING_TIME: Lazy<Histogram> = Lazy::new(|| {
+        let opts = HistogramOpts::new(
+            "processing_stats_batch_process_time",
+            "Processing time for batch processing",
+        )
+        .buckets(
+            prometheus::exponential_buckets(BUCKET_START, BUCKET_FACTOR, BUCKET_COUNT).unwrap(),
+        );
+
+        let hist = Histogram::with_opts(opts).unwrap();
+        registry().register(Box::new(hist.clone())).unwrap();
+        hist
+    });
+
+    &PROCESSING_TIME
+}
+
+fn batch_total_process_time() -> &'static IntCounter {
+    static PROCESSING_TIME: Lazy<IntCounter> = Lazy::new(|| {
+        let counter = IntCounter::new(
+            "processing_stats_batch_total_process_time",
+            "Processing time for all batch processing in microseconds",
+        )
+        .unwrap();
+
+        registry().register(Box::new(counter.clone())).unwrap();
+        counter
+    });
+
+    &PROCESSING_TIME
+}
+
+fn inc_batch_total_process_time(duration: Duration) {
+    batch_total_process_time().inc_by(duration.as_micros() as u64);
+}
+
+fn inc_total_processed(count: usize) {
+    processing_stats_total(ProcessingStatsEnum::TotalProcessed).inc_by(count as u64);
+}
+
+fn inc_successful_batches() {
+    processing_stats_total(ProcessingStatsEnum::SuccessfulBatches).inc();
+}
+
+fn inc_failed_batches() {
+    processing_stats_total(ProcessingStatsEnum::FailedBatches).inc();
+}
 
 struct BallotMessageGroup<'a> {
     pairwise: Vec<PairwiseBallot<'a>>,
@@ -23,6 +136,7 @@ struct BallotMessageGroup<'a> {
     plurality: Vec<PluralityBallot<'a>>,
 
     capacity: usize,
+    total_count: usize,
 }
 
 impl<'a> BallotMessageGroup<'a> {
@@ -34,24 +148,18 @@ impl<'a> BallotMessageGroup<'a> {
             plurality: Vec::with_capacity(capacity),
 
             capacity,
+            total_count: 0,
         }
     }
 
     fn add(&mut self, message: Ballot<'a>) {
         match message {
-            Ballot::Pairwise(ballot) => {
-                self.pairwise.push(ballot);
-            }
-            Ballot::Setwise(ballot) => {
-                self.setwise.push(ballot);
-            }
-            Ballot::Groupwise(ballot) => {
-                self.groupwise.push(ballot);
-            }
-            Ballot::Plurality(ballot) => {
-                self.plurality.push(ballot);
-            }
+            Ballot::Pairwise(ballot) => self.pairwise.push(ballot),
+            Ballot::Setwise(ballot) => self.setwise.push(ballot),
+            Ballot::Groupwise(ballot) => self.groupwise.push(ballot),
+            Ballot::Plurality(ballot) => self.plurality.push(ballot),
         }
+        self.total_count += 1;
     }
 
     fn take_all(
@@ -71,10 +179,7 @@ impl<'a> BallotMessageGroup<'a> {
     }
 
     fn is_empty(&self) -> bool {
-        self.pairwise.is_empty()
-            && self.setwise.is_empty()
-            && self.groupwise.is_empty()
-            && self.plurality.is_empty()
+        self.total_count == 0
     }
 
     fn need_process(&self) -> bool {
@@ -84,6 +189,34 @@ impl<'a> BallotMessageGroup<'a> {
             || self.groupwise.len() >= limit
             || self.plurality.len() >= limit
     }
+
+    fn get_counts(&self) -> (usize, usize, usize, usize) {
+        (
+            self.pairwise.len(),
+            self.setwise.len(),
+            self.groupwise.len(),
+            self.plurality.len(),
+        )
+    }
+}
+
+#[derive(Debug)]
+struct ProcessingStats {
+    total_processed: usize,
+    successful_batches: usize,
+    failed_batches: usize,
+    last_flush_time: std::time::Instant,
+}
+
+impl Default for ProcessingStats {
+    fn default() -> Self {
+        Self {
+            total_processed: 0,
+            successful_batches: 0,
+            failed_batches: 0,
+            last_flush_time: std::time::Instant::now(),
+        }
+    }
 }
 
 pub struct BallotProcessor {
@@ -91,7 +224,7 @@ pub struct BallotProcessor {
 }
 
 impl BallotProcessor {
-    pub async fn new(database: Arc<AppDatabase>, app_config: Arc<AppConfig>) -> Self {
+    pub async fn new(database: AppDatabase, app_config: Arc<AppConfig>) -> Self {
         let (sender, receiver) = unbounded::<Ballot>();
 
         let mut conn = database
@@ -125,88 +258,148 @@ impl BallotProcessor {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
 
         rt.block_on(async {
-            let mut ballot_groups = BallotMessageGroup::with_capacity(500);
-            let mut last_flush = std::time::Instant::now();
-            const FLUSH_INTERVAL: Duration = Duration::from_millis(500); // 500ms 超时
+            let mut ballot_groups = BallotMessageGroup::with_capacity(1000);
+            let mut stats = ProcessingStats::default();
+            const FLUSH_INTERVAL: Duration = Duration::from_millis(500);
+
+            let mut last_total_processed = 0;
 
             loop {
-                let mut count = 0;
                 match receiver.recv_timeout(FLUSH_INTERVAL) {
                     Ok(ballot) => {
                         ballot_groups.add(ballot);
 
                         if ballot_groups.need_process() {
-                            let (pairwise, _, _, _) = ballot_groups.take_all();
-
-                            match Self::process_pairwise_ballot_batch(
-                                &pairwise, conn, database, app_config,
+                            Self::process_batch_with_retry(
+                                &mut ballot_groups,
+                                conn,
+                                database,
+                                app_config,
+                                &mut stats,
                             )
-                            .await
-                            {
-                                Ok(_) => {
-                                    last_flush = std::time::Instant::now();
-                                    count += pairwise.len();
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Failed to process pairwise ballot batch: {}",
-                                        e
-                                    );
-                                    save_ballot_to_disk(&pairwise);
-                                }
-                            }
+                            .await;
                         }
                     }
                     Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                        if !ballot_groups.is_empty() && last_flush.elapsed() >= FLUSH_INTERVAL {
-                            let (pairwise, _, _, _) = ballot_groups.take_all();
-                            match Self::process_pairwise_ballot_batch(
-                                &pairwise, conn, database, app_config,
+                        if !ballot_groups.is_empty()
+                            && stats.last_flush_time.elapsed() >= FLUSH_INTERVAL
+                        {
+                            Self::process_batch_with_retry(
+                                &mut ballot_groups,
+                                conn,
+                                database,
+                                app_config,
+                                &mut stats,
                             )
-                            .await
-                            {
-                                Ok(_) => {
-                                    last_flush = std::time::Instant::now();
-                                    count += pairwise.len();
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Failed to process pairwise ballot batch: {}",
-                                        e
-                                    );
-                                    save_ballot_to_disk(&pairwise);
-                                }
-                            }
+                            .await;
                         }
                     }
                     Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                         if !ballot_groups.is_empty() {
-                            let (pairwise, _, _, _) = ballot_groups.take_all();
-                            match Self::process_pairwise_ballot_batch(
-                                &pairwise, conn, database, app_config,
+                            Self::process_batch_with_retry(
+                                &mut ballot_groups,
+                                conn,
+                                database,
+                                app_config,
+                                &mut stats,
                             )
-                            .await
-                            {
-                                Ok(_) => {}
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Failed to process pairwise ballot batch: {}",
-                                        e
-                                    );
-                                    save_ballot_to_disk(&pairwise);
-                                }
-                            }
+                            .await;
                         }
                         tracing::info!("Ballot processor thread shutting down");
                         break;
                     }
                 }
 
-                if count > 0 {
-                    tracing::info!("Processed {} ballots in this batch", count);
+                if stats.total_processed > 0 && stats.total_processed != last_total_processed {
+                    let (p, s, g, pl) = ballot_groups.get_counts();
+                    tracing::info!(
+                        "Processing stats: total={}, successful_batches={}, failed_batches={}, pending=[p:{}, s:{}, g:{}, pl:{}]",
+                        stats.total_processed,
+                        stats.successful_batches,
+                        stats.failed_batches,
+                        p, s, g, pl
+                    );
+                    last_total_processed = stats.total_processed;
+                    set_pending_processing_stats(p, s, g, pl);
                 }
             }
         });
+    }
+
+    async fn process_batch_with_retry(
+        ballot_groups: &mut BallotMessageGroup<'_>,
+        conn: &mut redis::aio::MultiplexedConnection,
+        database: &AppDatabase,
+        app_config: &AppConfig,
+        stats: &mut ProcessingStats,
+    ) {
+        let (pairwise, setwise, groupwise, plurality) = ballot_groups.take_all();
+        let total_count = pairwise.len() + setwise.len() + groupwise.len() + plurality.len();
+
+        if total_count == 0 {
+            return;
+        }
+
+        let timer = batch_process_time().start_timer();
+        let start_time = tokio::time::Instant::now();
+        for attempt in 1..=3 {
+            match Self::process_all_ballot_types(
+                &pairwise, &setwise, &groupwise, &plurality, conn, database, app_config,
+            )
+            .await
+            {
+                Ok(_) => {
+                    let duration_secs = timer.stop_and_record();
+                    stats.total_processed += total_count;
+                    stats.successful_batches += 1;
+                    stats.last_flush_time = std::time::Instant::now();
+                    inc_total_processed(total_count);
+                    inc_successful_batches();
+                    inc_batch_total_process_time(Duration::from_secs_f64(duration_secs));
+
+                    tracing::debug!(
+                        "Successfully processed {} ballots in batch, duration={:?}",
+                        total_count,
+                        start_time.elapsed()
+                    );
+                    return;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Attempt {}/{} failed to process batch of {} ballots: {}",
+                        attempt,
+                        3,
+                        total_count,
+                        e
+                    );
+
+                    if attempt == 3 {
+                        stats.failed_batches += 1;
+                        inc_failed_batches();
+                        save_failed_ballots(&pairwise, &setwise, &groupwise, &plurality);
+                    } else {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn process_all_ballot_types(
+        pairwise: &[PairwiseBallot<'_>],
+        _setwise: &[SetwiseBallot<'_>],
+        _groupwise: &[GroupwiseBallot<'_>],
+        _plurality: &[PluralityBallot<'_>],
+        conn: &mut redis::aio::MultiplexedConnection,
+        database: &AppDatabase,
+        app_config: &AppConfig,
+    ) -> Result<(), AppError> {
+        Self::process_pairwise_ballot_batch(pairwise, conn, database, app_config).await?;
+        // Self::process_setwise_ballot_batch(setwise, conn, database, app_config).await?;
+        // Self::process_groupwise_ballot_batch(groupwise, conn, database, app_config).await?;
+        // Self::process_plurality_ballot_batch(plurality, conn, database, app_config).await?;
+
+        Ok(())
     }
 
     async fn process_pairwise_ballot_batch(
@@ -220,9 +413,9 @@ impl BallotProcessor {
         }
 
         let vote_config = &app_config.vote;
-        let mut score_updates: Vec<((String, i32, i32), i32)> = Vec::with_capacity(ballots.len()); // ((topic_id, win_id, lose_id), total_multiplier)
 
         // 第一步：批量计算IP倍数
+        let start_time = tokio::time::Instant::now();
         let ip_multipliers = calculate_pairwise_multipliers(
             ballots,
             vote_config,
@@ -230,20 +423,54 @@ impl BallotProcessor {
             conn,
         )
         .await?;
+        tracing::debug!(
+            "Calculated IP multipliers for {} ballots, duration={:?}",
+            ballots.len(),
+            start_time.elapsed()
+        );
 
-        for item in ballots.iter() {
-            let multiplier = ip_multipliers
-                .get(item.info.ip.as_ref())
-                .copied()
-                .unwrap_or(vote_config.low_multiplier);
+        let start_time = tokio::time::Instant::now();
+        let (score_updates, grouped_ballots) = {
+            let ballots = ballots.to_vec();
+            let ip_multipliers = ip_multipliers.clone();
+            let low_multiplier = vote_config.low_multiplier;
 
-            score_updates.push((
-                (item.info.topic_id.to_string(), item.win, item.lose),
-                multiplier,
-            ));
-        }
+            let mut score_updates = Vec::with_capacity(ballots.len()); // ((topic_id, win_id, lose_id), total_multiplier)
+            let mut grouped_ballots: HashMap<String, Vec<StoredBallot>> = HashMap::new();
+
+            for item in ballots.iter() {
+                let multiplier = ip_multipliers
+                    .get(item.info.ip.as_ref())
+                    .copied()
+                    .unwrap_or(low_multiplier);
+
+                score_updates.push((
+                    (item.info.topic_id.to_string(), item.win, item.lose),
+                    multiplier,
+                ));
+
+                let stored_ballot = StoredBallot {
+                    ballot: Ballot::Pairwise(item.clone()),
+                    multiplier,
+                };
+
+                grouped_ballots
+                    .entry(item.info.topic_id.to_string())
+                    .or_default()
+                    .push(stored_ballot);
+            }
+
+            (score_updates, grouped_ballots)
+        };
+        tracing::debug!(
+            "Processed pairwise ballot batch, duration={:?}, score_updates.len={}, grouped_ballots.len={}",
+            start_time.elapsed(),
+            score_updates.len(),
+            grouped_ballots.len()
+        );
 
         // 第二步：批量执行分数更新
+        let start_time = tokio::time::Instant::now();
         batch_update_scores(
             score_updates,
             &database.redis.batch_score_update_script,
@@ -251,36 +478,24 @@ impl BallotProcessor {
             conn,
         )
         .await?;
+        tracing::debug!(
+            "Batch score updates completed, duration={:?}",
+            start_time.elapsed()
+        );
 
-        // 第三步：批量插入MongoDB
-        // 先按照topic_id分组
-        let mut grouped_ballots: HashMap<String, Vec<StoredBallot>> = HashMap::new();
-
-        for item in ballots.iter() {
-            let topic_id = item.info.topic_id.to_string();
-            let multiplier = ip_multipliers
-                .get(item.info.ip.as_ref())
-                .copied()
-                .unwrap_or(vote_config.low_multiplier);
-
-            let stored_ballot = StoredBallot {
-                ballot: Ballot::Pairwise(item.clone()),
-                multiplier,
-            };
-
-            grouped_ballots
-                .entry(topic_id)
-                .or_default()
-                .push(stored_ballot);
-        }
-
-        for (topic_id, ballots) in grouped_ballots.into_iter() {
+        let start_time = tokio::time::Instant::now();
+        for (topic_id, ballots) in grouped_ballots.iter() {
             let ballot_collection = database
                 .mongo_database
                 .collection::<StoredBallot>(&format!("ballots_{}", topic_id));
 
-            ballot_collection.insert_many(&ballots).await?;
+            ballot_collection.insert_many(ballots).await?;
         }
+        tracing::debug!(
+            "Inserted {} ballots into MongoDB, duration={:?}",
+            grouped_ballots.values().map(|v| v.len()).sum::<usize>(),
+            start_time.elapsed()
+        );
 
         Ok(())
     }
@@ -369,18 +584,58 @@ async fn batch_update_scores(
     Ok(())
 }
 
-fn save_ballot_to_disk(ballot: &[PairwiseBallot<'_>]) {
-    let target_file = "./ballots.log".to_string();
+fn save_failed_ballots(
+    pairwise: &[PairwiseBallot<'_>],
+    setwise: &[SetwiseBallot<'_>],
+    groupwise: &[GroupwiseBallot<'_>],
+    plurality: &[PluralityBallot<'_>],
+) {
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
 
-    let mut file = std::fs::OpenOptions::new()
+    if !pairwise.is_empty() {
+        save_ballots_to_file(
+            pairwise,
+            &format!("./failed_pairwise_ballots_{}.log", timestamp),
+        );
+    }
+    if !setwise.is_empty() {
+        save_ballots_to_file(
+            setwise,
+            &format!("./failed_setwise_ballots_{}.log", timestamp),
+        );
+    }
+    if !groupwise.is_empty() {
+        save_ballots_to_file(
+            groupwise,
+            &format!("./failed_groupwise_ballots_{}.log", timestamp),
+        );
+    }
+    if !plurality.is_empty() {
+        save_ballots_to_file(
+            plurality,
+            &format!("./failed_plurality_ballots_{}.log", timestamp),
+        );
+    }
+}
+
+fn save_ballots_to_file<T: serde::Serialize>(ballots: &[T], filename: &str) {
+    match std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&target_file)
-        .unwrap();
-
-    for item in ballot.iter() {
-        let data = serde_json::to_string(item).unwrap();
-        let line = format!("{}\n", data);
-        file.write_all(line.as_bytes()).unwrap();
+        .open(filename)
+    {
+        Ok(mut file) => {
+            for ballot in ballots {
+                if let Ok(data) = serde_json::to_string(ballot)
+                    && let Err(e) = writeln!(file, "{}", data) {
+                        tracing::error!("Failed to write to {}: {}", filename, e);
+                        break;
+                    }
+            }
+            tracing::info!("Saved {} failed ballots to {}", ballots.len(), filename);
+        }
+        Err(e) => {
+            tracing::error!("Failed to create backup file {}: {}", filename, e);
+        }
     }
 }

@@ -1,9 +1,5 @@
 version: '3.8'
 
-networks:
-  arkvote_network:
-    driver: bridge
-
 services:
   mongodb:
     image: docker.io/mongo:8
@@ -17,12 +13,26 @@ services:
     volumes:
       - ./data/mongodb:/data/db
     networks:
-      - arkvote_network
+      - internal-network
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:latest
+    container_name: arkvote_mongodb-exporter
+    restart: unless-stopped
+    ports:
+      - "9216:9216"
+    environment:
+      - MONGODB_URI=mongodb://arkvote:arkvote_password@mongodb:27017/admin
+    networks:
+      - internal-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
 
   redis:
     image: docker.io/redis:8-alpine
@@ -34,12 +44,48 @@ services:
     volumes:
       - ./data/redis:/data
     networks:
-      - arkvote_network
+      - internal-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.45.0
+    networks:
+      - internal-network
+    volumes:
+      - ./data/redis-exporter:/data
+    command: ["--redis.addr", "redis://redis:6379"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    networks:
+      - internal-network
+    user: "root"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml 
+      - ./data/prometheus:/prometheus:Z 
+    depends_on:
+      - redis-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    networks:
+      - internal-network
+      - external-network
+    ports:
+      - "9877:9877"
+    user: "root"
+    volumes:
+      - ./data/grafana/data:/var/lib/grafana
+      - ./data/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
 
   ark-vote:
     build:
@@ -61,5 +107,13 @@ services:
       - ./character_table.json:/app/character_table.json
       - ./docker_config:/app/config
       - ./logs:/app/logs
-    network_mode: host
+    networks:
+      - internal-network
+      - external-network
     command: ["portable-server"]
+
+networks:
+  internal-network:
+    internal: true
+  external-network:
+    internal: false

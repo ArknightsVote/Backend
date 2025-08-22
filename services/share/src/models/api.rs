@@ -30,6 +30,7 @@ pub enum ApiMsg {
     BallotNotFound,
     InvalidBallotCode(String),
     EndpointForbidden,
+    Error(String),
 }
 
 impl fmt::Display for ApiMsg {
@@ -60,6 +61,7 @@ impl fmt::Display for ApiMsg {
             ApiMsg::BallotNotFound => write!(f, "Ballot not found"),
             ApiMsg::InvalidBallotCode(msg) => write!(f, "{}", msg),
             ApiMsg::EndpointForbidden => write!(f, "Endpoint forbidden"),
+            ApiMsg::Error(msg) => write!(f, "{}", msg),
         }
     }
 }

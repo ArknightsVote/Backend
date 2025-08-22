@@ -32,3 +32,8 @@ rand.workspace = true
 crossbeam-channel = "0.5"
 uuid.workspace = true
 actix-cors = "0.7.1"
+moka = { version = "0.12.10", features = ["future"] }
+ahash = "0.8.12"
+actix-web-prom = { version = "0.10.0", features = ["process"] }
+once_cell = "1.21.3"
+prometheus = "0.14.0"
