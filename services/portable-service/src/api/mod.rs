@@ -3,6 +3,9 @@ mod ballot;
 mod results;
 mod topic;
 
+pub use ballot::bench_ballot_create_fn;
+pub use ballot::bench_ballot_save_fn;
+
 pub use ballot::ballot_create_fn;
 pub use ballot::ballot_save_fn;
 pub use ballot::ballot_skip_fn;

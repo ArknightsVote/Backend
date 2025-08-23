@@ -53,7 +53,7 @@ dashmap = "6.1.0"
 
 async-nats = "0.42.0"
 redis = { version = "0.32.5", features = ["ahash", "cache-aio", "tokio-comp"] }
-mongodb = "3.2.3"
+mongodb = "3.2.5"
 
 governor = "0.10.1"
 hdrhistogram = "7.5.4"

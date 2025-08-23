@@ -20,8 +20,9 @@ use share::{
 use crate::{
     api::{
         audit_topic_fn, audit_topics_list_fn, ballot_create_fn, ballot_save_fn, ballot_skip_fn,
-        results_1v1_matrix_fn, results_final_order_fn, topic_candidate_pool_fn, topic_create_fn,
-        topic_info_fn, topic_list_active_fn,
+        bench_ballot_create_fn, bench_ballot_save_fn, results_1v1_matrix_fn,
+        results_final_order_fn, topic_candidate_pool_fn, topic_create_fn, topic_info_fn,
+        topic_list_active_fn,
     },
     constants::{
         LUA_SCRIPT_BATCH_IP_COUNTER_SCRIPT, LUA_SCRIPT_BATCH_RECORD_1V1_SCRIPT,
@@ -202,6 +203,8 @@ impl PortableService {
                 .service(topic_list_active_fn)
                 .service(audit_topic_fn)
                 .service(audit_topics_list_fn)
+                .service(bench_ballot_create_fn)
+                .service(bench_ballot_save_fn)
                 .app_data(state)
                 .wrap(cors)
                 .wrap(middleware::Compress::default())
