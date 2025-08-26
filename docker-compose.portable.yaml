@@ -20,20 +20,6 @@ services:
       timeout: 5s
       retries: 5
 
-  mongodb-exporter:
-    image: percona/mongodb_exporter:latest
-    container_name: arkvote_mongodb-exporter
-    restart: unless-stopped
-    ports:
-      - "9216:9216"
-    environment:
-      - MONGODB_URI=mongodb://arkvote:arkvote_password@mongodb:27017/admin
-    networks:
-      - internal-network
-    depends_on:
-      mongodb:
-        condition: service_healthy
-
   redis:
     image: docker.io/redis:8-alpine
     container_name: arkvote_redis
