@@ -29,7 +29,7 @@ parking_lot.workspace = true
 dashmap.workspace = true
 reqwest.workspace = true
 rand.workspace = true
-crossbeam-channel = "0.5"
+crossbeam-channel = "0.5.15"
 uuid.workspace = true
 actix-cors = "0.7.1"
 moka = { version = "0.12.10", features = ["future"] }

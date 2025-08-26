@@ -14,53 +14,9 @@ name = "弧光作战"
 title = "弧光作战 六星角色投票"
 description = "弧光作战 六星角色投票"
 topic_type = "Pairwise"
-created_at = "2025-08-06T00:00:00Z"
-open_time = "2025-08-06T00:00:00Z"
-close_time = "2025-08-31T23:59:59Z"
-is_active = true
-
-[vote.preset_vote_topic.candidate_pool]
-type = "by_rarity"
-params = { rarities = ["TIER_6"], include_not_obtainable = false }
-
-[vote.preset_vote_topic.status.Approved]
-auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"
-auditor_name = "admin"
-audit_time = "2023-09-30T12:00:00Z"
-audit_reason = "Preset vote topic approved"
-audit_category = "ContentCompliance"
-
-[[vote.preset_vote_topic]]
-id = "rogue_5"
-name = "岁的界园志异"
-title = "岁的界园志异 肉鸽抓位投票"
-description = "岁的界园志异 肉鸽抓位投票"
-topic_type = "Pairwise"
-created_at = "2025-08-06T00:00:00Z"
-open_time = "2025-08-06T00:00:00Z"
-close_time = "2025-08-31T23:59:59Z"
-is_active = true
-
-[vote.preset_vote_topic.candidate_pool]
-type = "by_rarity"
-params = { rarities = ["TIER_6"], include_not_obtainable = false }
-
-[vote.preset_vote_topic.status.Approved]
-auditor_id = "a3dcb4d0-4b57-4a5e-9d8b-4e4fc49f3e84"
-auditor_name = "admin"
-audit_time = "2023-09-30T12:00:00Z"
-audit_reason = "Preset vote topic approved"
-audit_category = "ContentCompliance"
-
-[[vote.preset_vote_topic]]
-id = "crisis_v2_season_4_1_benchtest"
-name = "岁的界园志异-benchtest"
-title = "岁的界园志异 肉鸽抓位投票-benchtest"
-description = "岁的界园志异 肉鸽抓位投票-benchtest"
-topic_type = "Pairwise"
-created_at = "2025-08-11T00:00:00Z"
-open_time = "2025-08-11T00:00:00Z"
-close_time = "2025-08-31T23:59:59Z"
+created_at = "2025-08-01T00:00:00Z"
+open_time = "2025-08-27T21:00:00Z"
+close_time = "2025-09-03T21:00:00Z"
 is_active = true
 
 [vote.preset_vote_topic.candidate_pool]
@@ -79,8 +35,8 @@ allow_origin = ["*"]
 allow_methods = ["GET", "POST", "OPTIONS"]
 
 [database]
-redis_url = "redis://127.0.0.1:6379"
-mongodb_url = "mongodb://arkvote:arkvote_password@127.0.0.1:27017"
+redis_url = "redis://redis:6379"
+mongodb_url = "mongodb://arkvote:arkvote_password@mongodb:27017"
 mongodb_database = "ark_vote"
 
 [snowflake]
