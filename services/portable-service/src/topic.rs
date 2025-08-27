@@ -192,6 +192,24 @@ impl TopicService {
         }
     }
 
+    pub async fn is_topic_active(&self, topic_id: &str) -> Result<bool, AppError> {
+        if let Some(cached_topic) = self.cache.get(topic_id) {
+            return Ok(cached_topic.is_topic_active());
+        }
+
+        tracing::debug!("Fetching topic from database: {}", topic_id);
+        let _read_lock = self.refresh_lock.read().await;
+        let filter = doc! { "id": topic_id };
+
+        if let Some(topic) = self.topic_collection.find_one(filter).await? {
+            self.cache.insert(&topic);
+            Ok(topic.is_topic_active())
+        } else {
+            tracing::debug!("Topic not found in database: {}", topic_id);
+            Ok(false)
+        }
+    }
+
     pub async fn get_active_topic_ids(&self) -> Result<Vec<String>, AppError> {
         Ok(self.cache.get_active_topic_ids())
     }

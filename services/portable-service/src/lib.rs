@@ -21,8 +21,8 @@ use crate::{
     api::{
         audit_topic_fn, audit_topics_list_fn, ballot_create_fn, ballot_save_fn, ballot_skip_fn,
         bench_ballot_create_fn, bench_ballot_save_fn, results_1v1_matrix_fn,
-        results_final_order_fn, topic_candidate_pool_fn, topic_create_fn, topic_info_fn,
-        topic_list_active_fn,
+        results_final_order_fn, results_operator_timeline_fn, topic_candidate_pool_fn,
+        topic_create_fn, topic_info_fn, topic_list_active_fn,
     },
     constants::{
         LUA_SCRIPT_BATCH_IP_COUNTER_SCRIPT, LUA_SCRIPT_BATCH_RECORD_1V1_SCRIPT,
@@ -38,6 +38,7 @@ mod constants;
 mod error;
 mod proc;
 mod state;
+mod timeseries;
 mod topic;
 mod utils;
 
@@ -166,6 +167,21 @@ impl PortableService {
             .build()
             .unwrap();
 
+        {
+            let candidate_pool = topic_service
+                .get_candidate_pool("crisis_v2_season_4_1", &character_infos)
+                .await
+                .unwrap();
+            let operators_info = api::generate_operators_info(&candidate_pool, &character_infos);
+            tokio::spawn(timeseries::update_operator_statistics(
+                topic_service.clone(),
+                database.mongo_database.clone(),
+                database.redis.connection.clone(),
+                database.redis.final_order_script.clone(),
+                operators_info,
+            ));
+        }
+
         actix_web::HttpServer::new(move || {
             let worker_id = WORKER_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let snowflake = Snowflake::new(
@@ -210,6 +226,7 @@ impl PortableService {
                 .service(audit_topics_list_fn)
                 .service(bench_ballot_create_fn)
                 .service(bench_ballot_save_fn)
+                .service(results_operator_timeline_fn)
                 .app_data(state)
                 .wrap(cors)
                 .wrap(middleware::Compress::default())

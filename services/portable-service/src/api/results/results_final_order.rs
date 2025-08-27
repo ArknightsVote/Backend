@@ -44,14 +44,14 @@ impl OperatorResult {
 }
 
 #[derive(Clone)]
-struct OperatorsInfo {
-    operator_ids: Vec<i32>,
-    reverse_operators_id_dict: HashMap<i32, String>,
-    num_operators: usize,
-    op_stats_all_fields: Vec<String>,
+pub struct OperatorsInfo {
+    pub operator_ids: Vec<i32>,
+    pub reverse_operators_id_dict: HashMap<i32, String>,
+    pub num_operators: usize,
+    pub op_stats_all_fields: Vec<String>,
 }
 
-fn generate_operators_info(
+pub fn generate_operators_info(
     operator_ids: &[i32],
     character_infos: &[CharacterInfo],
 ) -> OperatorsInfo {

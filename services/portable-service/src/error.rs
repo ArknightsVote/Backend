@@ -20,6 +20,8 @@ pub enum AppError {
     MissingCharacterTableJson,
     #[error("reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
+    #[error("value access error: {0}")]
+    ValueAccess(#[from] mongodb::bson::document::ValueAccessError),
 }
 
 impl ResponseError for AppError {
@@ -45,6 +47,7 @@ impl ResponseError for AppError {
                 "Missing character table configuration",
             ),
             AppError::Reqwest(_) => (StatusCode::BAD_GATEWAY, "External service unavailable"),
+            AppError::ValueAccess(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Data access error"),
         };
 
         let error_response = ApiResponse {
@@ -66,6 +69,7 @@ impl ResponseError for AppError {
             AppError::MongoDb(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::MissingCharacterTableJson => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Reqwest(_) => StatusCode::BAD_GATEWAY,
+            AppError::ValueAccess(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

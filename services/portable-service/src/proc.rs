@@ -249,11 +249,8 @@ impl BallotProcessor {
         Self { sender }
     }
 
-    pub fn submit_ballot(
-        &'_ self,
-        ballot: Ballot<'static>,
-    ) -> Result<(), tokio::sync::mpsc::error::SendError<Ballot<'_>>> {
-        self.sender.send(ballot)
+    pub fn submit_ballot(&'_ self, ballot: Ballot<'static>) -> eyre::Result<()> {
+        Ok(self.sender.send(ballot)?)
     }
 
     async fn batch_processor_task(
@@ -371,10 +368,10 @@ impl BallotProcessor {
         let start_time = tokio::time::Instant::now();
         for attempt in 1..=3 {
             match Self::process_all_ballot_types(
-                &pairwise.make_contiguous(),
-                &setwise.make_contiguous(),
-                &groupwise.make_contiguous(),
-                &plurality.make_contiguous(),
+                pairwise.make_contiguous(),
+                setwise.make_contiguous(),
+                groupwise.make_contiguous(),
+                plurality.make_contiguous(),
                 conn,
                 database,
                 app_config,
@@ -411,10 +408,10 @@ impl BallotProcessor {
                         stats.failed_batches += 1;
                         inc_failed_batches();
                         save_failed_ballots(
-                            &pairwise.make_contiguous(),
-                            &setwise.make_contiguous(),
-                            &groupwise.make_contiguous(),
-                            &plurality.make_contiguous(),
+                            pairwise.make_contiguous(),
+                            setwise.make_contiguous(),
+                            groupwise.make_contiguous(),
+                            plurality.make_contiguous(),
                         );
                     } else {
                         tokio::time::sleep(Duration::from_millis(100)).await;
