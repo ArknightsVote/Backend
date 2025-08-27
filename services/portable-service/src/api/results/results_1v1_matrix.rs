@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use actix_web::{Responder, post, web};
 use redis::AsyncCommands;
@@ -7,7 +7,7 @@ use share::models::api::{
     Results1v1MatrixResponse,
 };
 
-use crate::AppState;
+use crate::{AppState, state::ResultsType};
 
 #[post("/results/1v1_matrix")]
 pub async fn results_1v1_matrix_fn(
@@ -32,9 +32,20 @@ pub async fn results_1v1_matrix_fn(
         }
     };
 
+    let cache_key = (target_topic.id, ResultsType::Matrix1v1);
+    if let Some(cached) = state.results_cache_store.get(&cache_key).await
+        && let Some(matrix) = cached.matrix
+    {
+        return Ok(web::Json(ApiResponse {
+            status: 0,
+            data: ApiData::Data(matrix.clone()),
+            message: ApiMsg::OK,
+        }));
+    }
+
     let mut conn = state.database.redis.connection.clone();
 
-    let target_key = format!("{}:op_matrix", target_topic.id);
+    let target_key = format!("{}:op_matrix", cache_key.0);
     let data: HashMap<String, i64> = match conn.hgetall(target_key).await {
         Ok(data) => data,
         Err(_) => {
@@ -46,7 +57,7 @@ pub async fn results_1v1_matrix_fn(
         }
     };
 
-    let target_key = format!("{}:op_counter", target_topic.id);
+    let target_key = format!("{}:op_counter", cache_key.0);
     let counter_data: HashMap<String, i64> = match conn.hgetall(target_key).await {
         Ok(data) => data,
         Err(_) => {
@@ -90,9 +101,20 @@ pub async fn results_1v1_matrix_fn(
         );
     }
 
+    let mut cached = state
+        .results_cache_store
+        .get(&cache_key)
+        .await
+        .unwrap_or_default();
+
+    let response = Arc::new(Results1v1MatrixResponse(rsp));
+
+    cached.matrix = Some(response.clone());
+    state.results_cache_store.insert(cache_key, cached).await;
+
     Ok(web::Json(ApiResponse {
         status: 0,
-        data: ApiData::Data(Results1v1MatrixResponse(rsp)),
+        data: ApiData::Data(response),
         message: ApiMsg::OK,
     }))
 }

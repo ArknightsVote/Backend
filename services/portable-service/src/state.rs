@@ -2,7 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use moka::future::Cache;
 use share::{
-    models::{api::CharacterPortrait, excel::CharacterInfo},
+    models::{
+        api::{CharacterPortrait, Results1v1MatrixResponse, ResultsFinalOrderResponse},
+        excel::CharacterInfo,
+    },
     snowflake::Snowflake,
 };
 
@@ -26,6 +29,18 @@ pub struct AppDatabase {
     pub mongo_database: mongodb::Database,
 }
 
+#[derive(Clone, Default)]
+pub struct ResultsCacheValue {
+    pub final_order: Option<Arc<ResultsFinalOrderResponse>>,
+    pub matrix: Option<Arc<Results1v1MatrixResponse>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ResultsType {
+    FinalOrder,
+    Matrix1v1,
+}
+
 pub struct AppState {
     pub database: AppDatabase,
     pub snowflake: Snowflake,
@@ -35,5 +50,6 @@ pub struct AppState {
 
     pub topic_service: Arc<TopicService>,
     pub ballot_cache_store: Cache<String, (i32, i32), ahash::RandomState>,
+    pub results_cache_store: Cache<(String, ResultsType), ResultsCacheValue, ahash::RandomState>,
     pub ballot_processor: Arc<BallotProcessor>,
 }

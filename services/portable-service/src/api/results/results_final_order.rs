@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use actix_web::{Responder, post, web};
+use ordered_float::OrderedFloat;
 use share::models::{
     api::{
         ApiData, ApiMsg, ApiResponse, FinalOrderItem, ResultsFinalOrderRequest,
@@ -9,7 +10,7 @@ use share::models::{
     excel::CharacterInfo,
 };
 
-use crate::AppState;
+use crate::{AppState, state::ResultsType};
 
 #[derive(Debug)]
 struct OperatorResult {
@@ -108,9 +109,21 @@ pub async fn results_final_order_fn(
         }
     };
 
+    let cache_key = (target_topic.id, ResultsType::FinalOrder);
+    if let Some(cached) = state.results_cache_store.get(&cache_key).await
+        && let Some(final_order) = &cached.final_order
+    {
+        tracing::debug!("Cache hit for final order of topic {}", req.topic_id);
+        return Ok(web::Json(ApiResponse {
+            status: 0,
+            data: ApiData::Data(final_order.clone()),
+            message: ApiMsg::OK,
+        }));
+    }
+
     let candidate_pool = match state
         .topic_service
-        .get_candidate_pool(&target_topic.id, &state.character_infos)
+        .get_candidate_pool(&cache_key.0, &state.character_infos)
         .await
     {
         Some(pool) => pool,
@@ -157,12 +170,15 @@ pub async fn results_final_order_fn(
     );
 
     results.sort_by(|a, b| {
-        b.rate
-            .partial_cmp(&a.rate)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        (OrderedFloat(b.rate), OrderedFloat(b.score), b.win, a.id).cmp(&(
+            OrderedFloat(a.rate),
+            OrderedFloat(a.score),
+            a.win,
+            b.id,
+        ))
     });
 
-    let response = ResultsFinalOrderResponse {
+    let response = Arc::new(ResultsFinalOrderResponse {
         topic_id: req.topic_id,
         items: results
             .into_iter()
@@ -176,7 +192,16 @@ pub async fn results_final_order_fn(
             })
             .collect(),
         count: total_valid_ballots.unwrap_or(0),
-    };
+    });
+
+    let mut cached = state
+        .results_cache_store
+        .get(&cache_key)
+        .await
+        .unwrap_or_default();
+
+    cached.final_order = Some(response.clone());
+    state.results_cache_store.insert(cache_key, cached).await;
 
     Ok(web::Json(ApiResponse {
         status: 0,

@@ -627,10 +627,11 @@ fn save_ballots_to_file<T: serde::Serialize>(ballots: &[T], filename: &str) {
         Ok(mut file) => {
             for ballot in ballots {
                 if let Ok(data) = serde_json::to_string(ballot)
-                    && let Err(e) = writeln!(file, "{}", data) {
-                        tracing::error!("Failed to write to {}: {}", filename, e);
-                        break;
-                    }
+                    && let Err(e) = writeln!(file, "{}", data)
+                {
+                    tracing::error!("Failed to write to {}: {}", filename, e);
+                    break;
+                }
             }
             tracing::info!("Saved {} failed ballots to {}", ballots.len(), filename);
         }

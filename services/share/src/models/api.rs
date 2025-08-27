@@ -222,7 +222,7 @@ pub struct BallotSaveResponse {
     pub code: i8,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct FinalOrderItem {
     pub name: String,
     pub id: i32,
@@ -237,7 +237,7 @@ pub struct ResultsFinalOrderRequest {
     pub topic_id: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct ResultsFinalOrderResponse {
     pub topic_id: String,
     pub items: Vec<FinalOrderItem>,
@@ -249,13 +249,13 @@ pub struct Results1v1MatrixRequest {
     pub topic_id: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct Results1v1MatrixItem {
     pub score: i64,
     pub count: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct Results1v1MatrixResponse(pub HashMap<String, Results1v1MatrixItem>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

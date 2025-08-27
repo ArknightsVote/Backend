@@ -147,6 +147,10 @@ impl PortableService {
             .time_to_live(Duration::from_secs(24 * 3600))
             .build_with_hasher(ahash::RandomState::default());
         tracing::debug!("Ballot store initialized");
+        let results_cache_store = Cache::builder()
+            .time_to_live(Duration::from_secs(1))
+            .build_with_hasher(ahash::RandomState::default());
+        tracing::debug!("Results store initialized");
 
         let bind_addr = self
             .config
@@ -177,6 +181,7 @@ impl PortableService {
                 character_portraits: character_portraits.clone(),
                 topic_service: topic_service.clone(),
                 ballot_cache_store: ballot_cache_store.clone(),
+                results_cache_store: results_cache_store.clone(),
                 ballot_processor: ballot_processor.clone(),
             };
 
@@ -209,7 +214,7 @@ impl PortableService {
                 .wrap(cors)
                 .wrap(middleware::Compress::default())
                 .wrap(middleware::NormalizePath::trim())
-                .wrap(middleware::Logger::default())
+                .wrap(middleware::Logger::default().log_level(tracing::log::Level::Debug))
         })
         .bind(bind_addr)?
         .run()
