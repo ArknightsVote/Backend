@@ -1,12 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     io::Write,
     sync::Arc,
     thread,
     time::Duration,
 };
 
-use crossbeam_channel::{Receiver, Sender, unbounded};
 use once_cell::sync::Lazy;
 use prometheus::{
     Histogram, HistogramOpts, IntCounter, IntCounterVec, opts,
@@ -130,10 +129,10 @@ fn inc_failed_batches() {
 }
 
 struct BallotMessageGroup<'a> {
-    pairwise: Vec<PairwiseBallot<'a>>,
-    setwise: Vec<SetwiseBallot<'a>>,
-    groupwise: Vec<GroupwiseBallot<'a>>,
-    plurality: Vec<PluralityBallot<'a>>,
+    pairwise: VecDeque<PairwiseBallot<'a>>,
+    setwise: VecDeque<SetwiseBallot<'a>>,
+    groupwise: VecDeque<GroupwiseBallot<'a>>,
+    plurality: VecDeque<PluralityBallot<'a>>,
 
     capacity: usize,
     total_count: usize,
@@ -142,10 +141,10 @@ struct BallotMessageGroup<'a> {
 impl<'a> BallotMessageGroup<'a> {
     fn with_capacity(capacity: usize) -> Self {
         Self {
-            pairwise: Vec::with_capacity(capacity),
-            setwise: Vec::with_capacity(capacity),
-            groupwise: Vec::with_capacity(capacity),
-            plurality: Vec::with_capacity(capacity),
+            pairwise: VecDeque::with_capacity(capacity),
+            setwise: VecDeque::with_capacity(capacity),
+            groupwise: VecDeque::with_capacity(capacity),
+            plurality: VecDeque::with_capacity(capacity),
 
             capacity,
             total_count: 0,
@@ -154,10 +153,10 @@ impl<'a> BallotMessageGroup<'a> {
 
     fn add(&mut self, message: Ballot<'a>) {
         match message {
-            Ballot::Pairwise(ballot) => self.pairwise.push(ballot),
-            Ballot::Setwise(ballot) => self.setwise.push(ballot),
-            Ballot::Groupwise(ballot) => self.groupwise.push(ballot),
-            Ballot::Plurality(ballot) => self.plurality.push(ballot),
+            Ballot::Pairwise(ballot) => self.pairwise.push_back(ballot),
+            Ballot::Setwise(ballot) => self.setwise.push_back(ballot),
+            Ballot::Groupwise(ballot) => self.groupwise.push_back(ballot),
+            Ballot::Plurality(ballot) => self.plurality.push_back(ballot),
         }
         self.total_count += 1;
     }
@@ -165,10 +164,10 @@ impl<'a> BallotMessageGroup<'a> {
     fn take_all(
         &mut self,
     ) -> (
-        Vec<PairwiseBallot<'a>>,
-        Vec<SetwiseBallot<'a>>,
-        Vec<GroupwiseBallot<'a>>,
-        Vec<PluralityBallot<'a>>,
+        VecDeque<PairwiseBallot<'a>>,
+        VecDeque<SetwiseBallot<'a>>,
+        VecDeque<GroupwiseBallot<'a>>,
+        VecDeque<PluralityBallot<'a>>,
     ) {
         (
             std::mem::take(&mut self.pairwise),
@@ -206,6 +205,7 @@ struct ProcessingStats {
     successful_batches: usize,
     failed_batches: usize,
     last_flush_time: std::time::Instant,
+    total_batch_time: std::time::Duration,
 }
 
 impl Default for ProcessingStats {
@@ -215,19 +215,20 @@ impl Default for ProcessingStats {
             successful_batches: 0,
             failed_batches: 0,
             last_flush_time: std::time::Instant::now(),
+            total_batch_time: std::time::Duration::ZERO,
         }
     }
 }
 
 pub struct BallotProcessor {
-    sender: Sender<Ballot<'static>>,
+    sender: tokio::sync::mpsc::UnboundedSender<Ballot<'static>>,
 }
 
 impl BallotProcessor {
     pub async fn new(database: AppDatabase, app_config: Arc<AppConfig>) -> Self {
-        let (sender, receiver) = unbounded::<Ballot>();
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel::<Ballot<'static>>();
 
-        let mut conn = database
+        let conn = database
             .redis
             .client
             .get_multiplexed_async_connection()
@@ -235,95 +236,121 @@ impl BallotProcessor {
             .expect("failed to create Redis connection");
 
         thread::spawn(move || {
-            Self::batch_processor_thread(receiver, &mut conn, &database, &app_config);
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+
+            rt.block_on(async move {
+                Self::batch_processor_task(receiver, conn, &database, &app_config).await;
+            });
         });
 
         Self { sender }
     }
 
-    #[allow(clippy::result_large_err)]
     pub fn submit_ballot(
         &'_ self,
         ballot: Ballot<'static>,
-    ) -> Result<(), crossbeam_channel::SendError<Ballot<'_>>> {
+    ) -> Result<(), tokio::sync::mpsc::error::SendError<Ballot<'_>>> {
         self.sender.send(ballot)
     }
 
-    fn batch_processor_thread(
-        receiver: Receiver<Ballot<'static>>,
-        conn: &mut redis::aio::MultiplexedConnection,
+    async fn batch_processor_task(
+        mut receiver: tokio::sync::mpsc::UnboundedReceiver<Ballot<'static>>,
+        mut conn: redis::aio::MultiplexedConnection,
         database: &AppDatabase,
-        app_config: &AppConfig,
+        config: &AppConfig,
     ) {
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        let mut ballot_groups = BallotMessageGroup::with_capacity(1000);
+        let mut stats = ProcessingStats::default();
 
-        rt.block_on(async {
-            let mut ballot_groups = BallotMessageGroup::with_capacity(1000);
-            let mut stats = ProcessingStats::default();
-            const FLUSH_INTERVAL: Duration = Duration::from_millis(500);
+        let flush_interval = Duration::from_millis(500);
+        let stats_log_interval = Duration::from_secs(5);
+        let max_wait = Duration::from_secs(5);
 
-            let mut last_total_processed = 0;
+        let mut last_total_processed = 0;
+        let mut last_log = std::time::Instant::now();
+        let mut last_flush = std::time::Instant::now();
 
-            loop {
-                match receiver.recv_timeout(FLUSH_INTERVAL) {
-                    Ok(ballot) => {
-                        ballot_groups.add(ballot);
+        let mut ticker = tokio::time::interval(flush_interval);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-                        if ballot_groups.need_process() {
-                            Self::process_batch_with_retry(
-                                &mut ballot_groups,
-                                conn,
-                                database,
-                                app_config,
-                                &mut stats,
-                            )
-                            .await;
+        loop {
+            tokio::select! {
+                maybe_ballot = receiver.recv() => {
+                    match maybe_ballot {
+                        Some(ballot) => {
+                            ballot_groups.add(ballot);
+                            if ballot_groups.need_process() || last_flush.elapsed() >= max_wait {
+                                Self::process_batch_with_retry(
+                                    &mut ballot_groups,
+                                    &mut conn,
+                                    database,
+                                    config,
+                                    &mut stats,
+                                ).await;
+                                last_flush = std::time::Instant::now();
+                            }
                         }
-                    }
-                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                        if !ballot_groups.is_empty()
-                            && stats.last_flush_time.elapsed() >= FLUSH_INTERVAL
-                        {
-                            Self::process_batch_with_retry(
-                                &mut ballot_groups,
-                                conn,
-                                database,
-                                app_config,
-                                &mut stats,
-                            )
-                            .await;
+                        None => {
+                            // graceful shutdown
+                            if !ballot_groups.is_empty() {
+                                Self::process_batch_with_retry(
+                                    &mut ballot_groups,
+                                    &mut conn,
+                                    database,
+                                    config,
+                                    &mut stats,
+                                ).await;
+                            }
+                            tracing::info!("Ballot processor shutting down");
+                            break;
                         }
-                    }
-                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
-                        if !ballot_groups.is_empty() {
-                            Self::process_batch_with_retry(
-                                &mut ballot_groups,
-                                conn,
-                                database,
-                                app_config,
-                                &mut stats,
-                            )
-                            .await;
-                        }
-                        tracing::info!("Ballot processor thread shutting down");
-                        break;
                     }
                 }
-
-                if stats.total_processed > 0 && stats.total_processed != last_total_processed {
-                    let (p, s, g, pl) = ballot_groups.get_counts();
-                    tracing::info!(
-                        "Processing stats: total={}, successful_batches={}, failed_batches={}, pending=[p:{}, s:{}, g:{}, pl:{}]",
-                        stats.total_processed,
-                        stats.successful_batches,
-                        stats.failed_batches,
-                        p, s, g, pl
-                    );
-                    last_total_processed = stats.total_processed;
-                    set_pending_processing_stats(p, s, g, pl);
+                _ = ticker.tick() => {
+                    if !ballot_groups.is_empty() && last_flush.elapsed() >= flush_interval {
+                        Self::process_batch_with_retry(
+                            &mut ballot_groups,
+                            &mut conn,
+                            database,
+                            config,
+                            &mut stats,
+                        ).await;
+                        last_flush = std::time::Instant::now();
+                    }
                 }
             }
-        });
+
+            let (p, s, g, pl) = ballot_groups.get_counts();
+            set_pending_processing_stats(p, s, g, pl);
+
+            if stats.total_processed > 0
+                && stats.total_processed != last_total_processed
+                && last_log.elapsed() >= stats_log_interval
+            {
+                let avg_batch_time = if stats.successful_batches > 0 {
+                    stats.total_batch_time / stats.successful_batches as u32
+                } else {
+                    std::time::Duration::ZERO
+                };
+
+                tracing::info!(
+                    "Processing stats: total={}, successful_batches={}, failed_batches={}, pending=[p:{}, s:{}, g:{}, pl:{}], avg_batch_time={:?}",
+                    stats.total_processed,
+                    stats.successful_batches,
+                    stats.failed_batches,
+                    p,
+                    s,
+                    g,
+                    pl,
+                    avg_batch_time
+                );
+                last_total_processed = stats.total_processed;
+                last_log = std::time::Instant::now();
+            }
+        }
     }
 
     async fn process_batch_with_retry(
@@ -333,7 +360,7 @@ impl BallotProcessor {
         app_config: &AppConfig,
         stats: &mut ProcessingStats,
     ) {
-        let (pairwise, setwise, groupwise, plurality) = ballot_groups.take_all();
+        let (mut pairwise, mut setwise, mut groupwise, mut plurality) = ballot_groups.take_all();
         let total_count = pairwise.len() + setwise.len() + groupwise.len() + plurality.len();
 
         if total_count == 0 {
@@ -344,12 +371,19 @@ impl BallotProcessor {
         let start_time = tokio::time::Instant::now();
         for attempt in 1..=3 {
             match Self::process_all_ballot_types(
-                &pairwise, &setwise, &groupwise, &plurality, conn, database, app_config,
+                &pairwise.make_contiguous(),
+                &setwise.make_contiguous(),
+                &groupwise.make_contiguous(),
+                &plurality.make_contiguous(),
+                conn,
+                database,
+                app_config,
             )
             .await
             {
                 Ok(_) => {
                     let duration_secs = timer.stop_and_record();
+                    stats.total_batch_time += start_time.elapsed();
                     stats.total_processed += total_count;
                     stats.successful_batches += 1;
                     stats.last_flush_time = std::time::Instant::now();
@@ -376,7 +410,12 @@ impl BallotProcessor {
                     if attempt == 3 {
                         stats.failed_batches += 1;
                         inc_failed_batches();
-                        save_failed_ballots(&pairwise, &setwise, &groupwise, &plurality);
+                        save_failed_ballots(
+                            &pairwise.make_contiguous(),
+                            &setwise.make_contiguous(),
+                            &groupwise.make_contiguous(),
+                            &plurality.make_contiguous(),
+                        );
                     } else {
                         tokio::time::sleep(Duration::from_millis(100)).await;
                     }
